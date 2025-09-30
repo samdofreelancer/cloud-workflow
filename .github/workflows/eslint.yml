@@ -1,0 +1,70 @@
+name: eslint-reuse
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        default: '20'
+      working-directory:
+        type: string
+        default: '.'
+      package-manager:
+        type: string
+        default: 'npm' # npm | pnpm | yarn
+      eslint-args:
+        type: string
+        default: '. --max-warnings=0'
+      use-reviewdog:
+        type: boolean
+        default: true
+    secrets:
+      REVIEWDOG_TOKEN:
+        required: false
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ inputs.package-manager }}
+          cache-dependency-path: |
+            ${{ inputs.working-directory }}/package-lock.json
+            ${{ inputs.working-directory }}/pnpm-lock.yaml
+            ${{ inputs.working-directory }}/yarn.lock
+
+      - name: Enable pnpm
+        if: ${{ inputs.package-manager == 'pnpm' }}
+        run: npm i -g pnpm
+
+      - name: Install deps (safe)
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if [ "${{ inputs.package-manager }}" = "npm" ]; then
+            npm ci --ignore-scripts
+          elif [ "${{ inputs.package-manager }}" = "pnpm" ]; then
+            pnpm i --frozen-lockfile --ignore-scripts
+          else
+            yarn install --frozen-lockfile --ignore-scripts
+          fi
+
+      - name: ESLint (plain)
+        if: ${{ inputs.use-reviewdog == false }}
+        working-directory: ${{ inputs.working-directory }}
+        run: npx eslint ${{ inputs.eslint-args }}
+
+      - name: ESLint (reviewdog)
+        if: ${{ inputs.use-reviewdog }}
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.REVIEWDOG_TOKEN || github.token }}
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          npx eslint -f checkstyle ${{ inputs.eslint-args }} \
+          | npx reviewdog -f=checkstyle -name=eslint -reporter=github-pr-check -fail-on-error=true
