@@ -9,34 +9,25 @@ on:
       working-directory:
         type: string
         default: '.'
-      package-manager:
-        type: string
-        default: 'npm' # npm | pnpm | yarn
-      eslint-args:
-        type: string
-        default: '. --max-warnings=0'
-      use-reviewdog:
-        type: boolean
-        default: true
-    secrets:
-      REVIEWDOG_TOKEN:
-        required: false
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
 
       - name: Install deps (npm ci)
-        run: npm ci --ignore-scripts
         working-directory: ${{ inputs.working-directory }}
+        run: npm ci --ignore-scripts
 
       - name: Run ESLint
-        run: npm run lint
         working-directory: ${{ inputs.working-directory }}
+        run: npm run lint
