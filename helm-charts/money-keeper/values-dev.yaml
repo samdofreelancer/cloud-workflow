@@ -1,0 +1,47 @@
+# Development Environment Values Override
+environment: dev
+
+backend:
+  replicaCount: 1
+  image:
+    pullPolicy: Always
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "250m"
+  autoscaling:
+    enabled: false
+  healthCheck:
+    livenessProbe:
+      initialDelaySeconds: 60
+      periodSeconds: 30
+
+frontend:
+  replicaCount: 1
+  image:
+    pullPolicy: Always
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "100m"
+  autoscaling:
+    enabled: false
+
+ingress:
+  hosts:
+    - host: money-keeper-dev.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+database:
+  enabled: false
+  host: "postgres-dev.example.com"
+  port: 5432
+  name: "money_keeper_dev"

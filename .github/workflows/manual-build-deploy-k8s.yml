@@ -1,0 +1,446 @@
+name: Manual Build & Deploy Money Keeper to K8s
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment (dev, staging, production)'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+        default: 'dev'
+      build_backend:
+        description: 'Build backend image'
+        required: false
+        type: boolean
+        default: true
+      build_frontend:
+        description: 'Build frontend image'
+        required: false
+        type: boolean
+        default: true
+      deploy:
+        description: 'Deploy to Kubernetes'
+        required: false
+        type: boolean
+        default: true
+      image_tag:
+        description: 'Docker image tag (default: commit SHA or manual tag)'
+        required: false
+        type: string
+        default: ''
+      money_keeper_repo:
+        description: 'Money Keeper repository to build from'
+        required: false
+        type: string
+        default: 'samdofreelancer/money-keeper'
+      money_keeper_ref:
+        description: 'Branch/ref to checkout from Money Keeper repo'
+        required: false
+        type: string
+        default: 'master'
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE_NAME: samdofreelancer/money-keeper-backend
+  FRONTEND_IMAGE_NAME: samdofreelancer/money-keeper-frontend
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.set_tag.outputs.tag }}
+    steps:
+      - name: Set image tag
+        id: set_tag
+        run: |
+          if [ -z "${{ inputs.image_tag }}" ]; then
+            TAG="$(date +%Y%m%d-%H%M%S)-${{ github.run_id }}"
+          else
+            TAG="${{ inputs.image_tag }}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Using image tag: ${TAG}"
+
+  build-backend:
+    needs: setup
+    if: ${{ inputs.build_backend == true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.backend-image }}
+    steps:
+      - name: Checkout Money Keeper repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.money_keeper_repo }}
+          ref: ${{ inputs.money_keeper_ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Output backend image path
+        id: image
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}"
+          echo "backend-image=${IMAGE}" >> $GITHUB_OUTPUT
+
+  build-frontend:
+    needs: setup
+    if: ${{ inputs.build_frontend == true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.frontend-image }}
+    steps:
+      - name: Checkout Money Keeper repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.money_keeper_repo }}
+          ref: ${{ inputs.money_keeper_ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Output frontend image path
+        id: image
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}"
+          echo "frontend-image=${IMAGE}" >> $GITHUB_OUTPUT
+
+  deploy-to-k8s:
+    needs: [setup, build-backend, build-frontend]
+    if: ${{ inputs.deploy == true }}
+    runs-on: ubuntu-latest
+    environment: 
+      name: ${{ inputs.environment }}
+      url: https://${{ steps.env_vars.outputs.app_url }}
+    steps:
+      - name: Checkout cloud-workflow repository
+        uses: actions/checkout@v4
+
+      - name: Set environment variables
+        id: env_vars
+        run: |
+          ENV_NAME="${{ inputs.environment }}"
+          NAMESPACE="money-keeper-${ENV_NAME}"
+          RELEASE_NAME="money-keeper"
+          
+          case "${ENV_NAME}" in
+            dev)
+              APP_URL="money-keeper-dev.example.com"
+              REPLICAS="1"
+              ;;
+            staging)
+              APP_URL="money-keeper-staging.example.com"
+              REPLICAS="2"
+              ;;
+            production)
+              APP_URL="money-keeper.example.com"
+              REPLICAS="3"
+              ;;
+          esac
+          
+          echo "namespace=${NAMESPACE}" >> $GITHUB_OUTPUT
+          echo "release_name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
+          echo "app_url=${APP_URL}" >> $GITHUB_OUTPUT
+          echo "replicas=${REPLICAS}" >> $GITHUB_OUTPUT
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.13.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_BASE64 }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+          kubectl cluster-info || exit 1
+          echo "✓ kubeconfig configured successfully"
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace ${{ steps.env_vars.outputs.namespace }} --dry-run=client -o yaml | kubectl apply -f -
+          echo "✓ Namespace ${{ steps.env_vars.outputs.namespace }} ready"
+
+      - name: Create image pull secret
+        run: |
+          kubectl create secret docker-registry ghcr-secret \
+            --docker-server=${{ env.REGISTRY }} \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GITHUB_TOKEN }} \
+            --docker-email=${{ github.actor }}@users.noreply.github.com \
+            -n ${{ steps.env_vars.outputs.namespace }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+          echo "✓ Image pull secret configured"
+
+      - name: Create ConfigMap for backend configuration
+        run: |
+          kubectl create configmap money-keeper-backend-config \
+            --from-literal=DATABASE_HOST="${{ secrets.DB_HOST }}" \
+            --from-literal=DATABASE_PORT="${{ secrets.DB_PORT }}" \
+            --from-literal=DATABASE_NAME="${{ secrets.DB_NAME }}" \
+            -n ${{ steps.env_vars.outputs.namespace }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+          echo "✓ ConfigMap created"
+
+      - name: Create Secrets for database
+        run: |
+          kubectl create secret generic money-keeper-db-secret \
+            --from-literal=DATABASE_USER="${{ secrets.DB_USER }}" \
+            --from-literal=DATABASE_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+            -n ${{ steps.env_vars.outputs.namespace }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+          echo "✓ Database secrets created"
+
+      - name: Prepare Helm values override
+        run: |
+          cat > /tmp/override-values.yaml <<'EOF'
+          environment: ${{ inputs.environment }}
+          
+          replicaCount: ${{ steps.env_vars.outputs.replicas }}
+          
+          backend:
+            image:
+              repository: ${{ needs.build-backend.outputs.image }}
+              tag: ""
+              pullPolicy: IfNotPresent
+            replicaCount: ${{ steps.env_vars.outputs.replicas }}
+            
+            service:
+              type: ClusterIP
+              port: 8080
+              targetPort: 8080
+            
+            env:
+              DATABASE_HOST: "{{ .Values.database.host }}"
+              DATABASE_PORT: "{{ .Values.database.port }}"
+              DATABASE_NAME: "{{ .Values.database.name }}"
+              SPRING_PROFILE: "${{ inputs.environment }}"
+            
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+            
+            healthCheck:
+              enabled: true
+              path: /actuator/health
+              initialDelaySeconds: 30
+              periodSeconds: 10
+          
+          frontend:
+            image:
+              repository: ${{ needs.build-frontend.outputs.image }}
+              tag: ""
+              pullPolicy: IfNotPresent
+            replicaCount: ${{ steps.env_vars.outputs.replicas }}
+            
+            service:
+              type: ClusterIP
+              port: 80
+              targetPort: 80
+            
+            env:
+              VITE_BACKEND_HOST: "http://money-keeper-backend-service:8080/api"
+            
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "200m"
+          
+          ingress:
+            enabled: true
+            className: nginx
+            annotations:
+              cert-manager.io/cluster-issuer: "letsencrypt-prod"
+            hosts:
+              - host: ${{ steps.env_vars.outputs.app_url }}
+                paths:
+                  - path: /
+                    pathType: Prefix
+            tls:
+              - secretName: money-keeper-tls
+                hosts:
+                  - ${{ steps.env_vars.outputs.app_url }}
+          
+          database:
+            enabled: false
+            # Database managed externally
+          
+          imagePullSecrets:
+            - name: ghcr-secret
+          EOF
+          cat /tmp/override-values.yaml
+
+      - name: Helm dependency update
+        run: |
+          cd ./helm-charts/money-keeper
+          helm dependency update
+
+      - name: Helm deploy (upgrade or install)
+        run: |
+          helm upgrade --install ${{ steps.env_vars.outputs.release_name }} \
+            ./helm-charts/money-keeper \
+            -n ${{ steps.env_vars.outputs.namespace }} \
+            -f /tmp/override-values.yaml \
+            --timeout 10m \
+            --wait \
+            --atomic \
+            --create-namespace
+          echo "✓ Helm deployment completed"
+
+      - name: Wait for rollout - backend
+        run: |
+          kubectl rollout status deployment/money-keeper-backend \
+            -n ${{ steps.env_vars.outputs.namespace }} \
+            --timeout=5m
+          echo "✓ Backend deployment rolled out"
+
+      - name: Wait for rollout - frontend
+        run: |
+          kubectl rollout status deployment/money-keeper-frontend \
+            -n ${{ steps.env_vars.outputs.namespace }} \
+            --timeout=5m
+          echo "✓ Frontend deployment rolled out"
+
+      - name: Verify deployment
+        run: |
+          echo "=== Deployments ==="
+          kubectl get deployments -n ${{ steps.env_vars.outputs.namespace }}
+          echo ""
+          echo "=== Pods ==="
+          kubectl get pods -n ${{ steps.env_vars.outputs.namespace }}
+          echo ""
+          echo "=== Services ==="
+          kubectl get services -n ${{ steps.env_vars.outputs.namespace }}
+          echo ""
+          echo "=== Ingress ==="
+          kubectl get ingress -n ${{ steps.env_vars.outputs.namespace }}
+
+      - name: Get deployment info
+        id: deployment_info
+        run: |
+          echo "=== Backend Logs (last 10 lines) ==="
+          kubectl logs -n ${{ steps.env_vars.outputs.namespace }} \
+            -l app=money-keeper-backend \
+            --tail=10 || echo "No logs available yet"
+          
+          echo ""
+          echo "=== Frontend Logs (last 10 lines) ==="
+          kubectl logs -n ${{ steps.env_vars.outputs.namespace }} \
+            -l app=money-keeper-frontend \
+            --tail=10 || echo "No logs available yet"
+
+      - name: Deployment summary
+        run: |
+          cat <<'EOF'
+          ╔════════════════════════════════════════════════════════════╗
+          ║          DEPLOYMENT SUMMARY - MONEY KEEPER                ║
+          ╠════════════════════════════════════════════════════════════╣
+          ║ Environment:     ${{ inputs.environment }}
+          ║ Namespace:       ${{ steps.env_vars.outputs.namespace }}
+          ║ Release Name:    ${{ steps.env_vars.outputs.release_name }}
+          ║ Image Tag:       ${{ needs.setup.outputs.image_tag }}
+          ║ Replicas:        ${{ steps.env_vars.outputs.replicas }}
+          ║ App URL:         https://${{ steps.env_vars.outputs.app_url }}
+          ║ 
+          ║ Deployed Images:
+          ║   Backend:       ${{ needs.build-backend.outputs.image }}
+          ║   Frontend:      ${{ needs.build-frontend.outputs.image }}
+          ╚════════════════════════════════════════════════════════════╝
+          EOF
+
+      - name: Post deployment notification
+        if: always()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Money Keeper Deployment ${{ job.status }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Deployment ${{ job.status }}*\n\nEnvironment: *${{ inputs.environment }}*\nImage Tag: `${{ needs.setup.outputs.image_tag }}`\nApp URL: https://${{ steps.env_vars.outputs.app_url }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

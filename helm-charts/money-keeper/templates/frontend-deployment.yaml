@@ -1,0 +1,78 @@
+{{- if .Values.frontend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "money-keeper.fullname" . }}-frontend
+  labels:
+    {{- include "money-keeper.labels" . | nindent 4 }}
+    app: {{ include "money-keeper.fullname" . }}-frontend
+spec:
+  {{- if not .Values.frontend.autoscaling.enabled }}
+  replicas: {{ .Values.frontend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "money-keeper.selectorLabels" . | nindent 6 }}
+      app: {{ include "money-keeper.fullname" . }}-frontend
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.frontend.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "money-keeper.selectorLabels" . | nindent 8 }}
+        app: {{ include "money-keeper.fullname" . }}-frontend
+        {{- with .Values.frontend.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "money-keeper.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.frontend.securityContext | nindent 8 }}
+      containers:
+      - name: frontend
+        image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.frontend.service.targetPort }}
+          protocol: TCP
+        env:
+        {{- range $key, $value := .Values.frontend.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        
+        {{- if .Values.frontend.healthCheck.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.frontend.healthCheck.livenessProbe.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.frontend.healthCheck.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.frontend.healthCheck.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.frontend.healthCheck.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.frontend.healthCheck.livenessProbe.failureThreshold }}
+        
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.frontend.healthCheck.readinessProbe.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.frontend.healthCheck.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.frontend.healthCheck.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.frontend.healthCheck.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.frontend.healthCheck.readinessProbe.failureThreshold }}
+        {{- end }}
+        
+        resources:
+          {{- toYaml .Values.frontend.resources | nindent 12 }}
+      
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

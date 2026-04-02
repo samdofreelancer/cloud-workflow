@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.backend.configMap | default (include "money-keeper.fullname" .) }}-config
+  labels:
+    {{- include "money-keeper.labels" . | nindent 4 }}
+data:
+  DATABASE_HOST: "{{ .Values.database.host | default "localhost" }}"
+  DATABASE_PORT: "{{ .Values.database.port | default "5432" }}"
+  DATABASE_NAME: "{{ .Values.database.name | default "money_keeper" }}"

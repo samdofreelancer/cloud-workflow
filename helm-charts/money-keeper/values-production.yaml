@@ -1,0 +1,93 @@
+# Production Environment Values Override
+environment: production
+
+backend:
+  replicaCount: 3
+  image:
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  healthCheck:
+    livenessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      failureThreshold: 3
+    readinessProbe:
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      failureThreshold: 2
+
+frontend:
+  replicaCount: 3
+  image:
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "400m"
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "1000"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+  hosts:
+    - host: money-keeper.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: money-keeper-tls
+      hosts:
+        - money-keeper.example.com
+
+database:
+  enabled: false
+  host: "postgres-prod.example.com"
+  port: 5432
+  name: "money_keeper_prod"
+
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    interval: 30s
+
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM UTC
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app
+              operator: In
+              values:
+                - money-keeper-backend
+                - money-keeper-frontend
+        topologyKey: kubernetes.io/hostname
