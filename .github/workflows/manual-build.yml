@@ -33,6 +33,8 @@ env:
   REGISTRY: ghcr.io
   BACKEND_IMAGE_NAME: samdofreelancer/money-keeper-backend
   FRONTEND_IMAGE_NAME: samdofreelancer/money-keeper-frontend
+  # Force GitHub Actions to use Node.js 24 instead of deprecated Node.js 20
+  # Remove this line after June 2, 2026 when Node.js 20 support is fully deprecated
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -44,13 +46,17 @@ jobs:
       - name: Set image tag
         id: set_tag
         run: |
+          # This workflow is triggered from cloud-workflow repo but builds from money-keeper repo
+          # Therefore github.sha points to cloud-workflow commit, not money-keeper source code
+          # Solution: Use timestamp + run_id instead of commit SHA for traceability
+          # Format: YYYYMMDD-HHMMSS-<run_id> ensures uniqueness and chronological ordering
           if [ -z "${{ inputs.image_tag }}" ]; then
             TAG="$(date +%Y%m%d-%H%M%S)-${{ github.run_id }}"
           else
             TAG="${{ inputs.image_tag }}"
           fi
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "Using image tag: ${TAG}"
+          echo "✓ Image tag: ${TAG}"
 
   build-backend:
     needs: setup
@@ -67,6 +73,8 @@ jobs:
         with:
           repository: ${{ inputs.money_keeper_repo }}
           ref: ${{ inputs.money_keeper_ref }}
+          # ⚠️  github.token only works for public repos or repos within the same organization
+          # For private cross-org repos, use secrets.GITHUB_PAT with 'repo' scope instead
           token: ${{ github.token }}
 
       - name: Set up Docker Buildx
@@ -77,6 +85,8 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
+          # Primary: Use GHCR_PAT for explicit, controlled access (requires setup in repo secrets)
+          # Fallback: Use GITHUB_TOKEN if GHCR_PAT not configured (less secure for cross-org repos)
           password: ${{ secrets.GHCR_PAT || github.token }}
 
       - name: Extract metadata
@@ -89,6 +99,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push backend image
+        id: push
         uses: docker/build-push-action@v5.4.0
         with:
           context: ./backend
@@ -98,6 +109,11 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Log backend image digest
+        run: |
+          echo "✓ Backend image built and pushed"
+          echo "  Digest: ${{ steps.push.outputs.digest }}"
 
       - name: Output backend image path
         id: image
@@ -120,6 +136,8 @@ jobs:
         with:
           repository: ${{ inputs.money_keeper_repo }}
           ref: ${{ inputs.money_keeper_ref }}
+          # ⚠️  github.token only works for public repos or repos within the same organization
+          # For private cross-org repos, use secrets.GITHUB_PAT with 'repo' scope instead
           token: ${{ github.token }}
 
       - name: Set up Docker Buildx
@@ -130,6 +148,8 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
+          # Primary: Use GHCR_PAT for explicit, controlled access (requires setup in repo secrets)
+          # Fallback: Use GITHUB_TOKEN if GHCR_PAT not configured (less secure for cross-org repos)
           password: ${{ secrets.GHCR_PAT || github.token }}
 
       - name: Extract metadata
@@ -142,6 +162,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push frontend image
+        id: push
         uses: docker/build-push-action@v5.4.0
         with:
           context: ./frontend
@@ -151,6 +172,11 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Log frontend image digest
+        run: |
+          echo "✓ Frontend image built and pushed"
+          echo "  Digest: ${{ steps.push.outputs.digest }}"
 
       - name: Output frontend image path
         id: image
@@ -165,33 +191,49 @@ jobs:
     steps:
       - name: Build Summary
         run: |
-          cat <<'EOF'
-          ╔════════════════════════════════════════════════════════════╗
-          ║          BUILD SUMMARY - MONEY KEEPER DOCKER IMAGES       ║
-          ╠════════════════════════════════════════════════════════════╣
-          ║ Image Tag:       ${{ needs.setup.outputs.image_tag }}
-          ║ 
-          ║ Build Status:
-          ║   Setup:        ${{ needs.setup.result }}
-          ║   Backend:      ${{ needs.build-backend.result }}
-          ║   Frontend:     ${{ needs.build-frontend.result }}
-          ║ 
-          ║ Docker Images:
-          ║   Backend:      ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}
-          ║   Frontend:     ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}
-          ║ 
-          ║ Latest Tags:
-          ║   Backend:      ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
-          ║   Frontend:     ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
-          ║ 
-          ║ Next Steps:
-          ║   1. Run: Deploy Money Keeper to K8s
-          ║   2. Paste backend image URL above
-          ║   3. Paste frontend image URL above
-          ║   4. Select environment (dev/staging/production)
-          ╚════════════════════════════════════════════════════════════╝
-          EOF
+          {
+            echo "## 📦 Build Summary - Money Keeper Docker Images"
+            echo ""
+            echo "### Image Tag"
+            echo "\`${{ needs.setup.outputs.image_tag }}\`"
+            echo ""
+            echo "### Build Status"
+            echo "| Component | Status |"
+            echo "|-----------|--------|"
+            echo "| setup | ${{ needs.setup.result }} |"
+            echo "| build-backend | ${{ needs.build-backend.result }} |"
+            echo "| build-frontend | ${{ needs.build-frontend.result }} |"
+            echo ""
+            echo "### Docker Images"
+            echo "**Backend:** \`${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}\`"
+            echo ""
+            echo "**Frontend:** \`${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}\`"
+            echo ""
+            echo "### Latest Tags"
+            echo "- Backend: \`${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest\`"
+            echo "- Frontend: \`${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest\`"
+            echo ""
+            echo "### Next Steps"
+            echo "1. Copy backend image URL"
+            echo "2. Copy frontend image URL"
+            echo "3. Run: **Deploy Money Keeper to K8s** workflow"
+            echo "4. Paste URLs and select environment (dev/staging/production)"
+          } >> $GITHUB_STEP_SUMMARY
         env:
           REGISTRY: ${{ env.REGISTRY }}
           BACKEND_IMAGE_NAME: ${{ env.BACKEND_IMAGE_NAME }}
           FRONTEND_IMAGE_NAME: ${{ env.FRONTEND_IMAGE_NAME }}
+
+      - name: Fail if any build failed
+        if: |
+          needs.setup.result == 'failure' ||
+          (needs.build-backend.result == 'failure' && inputs.build_backend == true) ||
+          (needs.build-frontend.result == 'failure' && inputs.build_frontend == true)
+        run: |
+          echo "❌ Build workflow failed!"
+          echo ""
+          echo "Failed jobs:"
+          [[ "${{ needs.setup.result }}" == "failure" ]] && echo "  - setup"
+          [[ "${{ needs.build-backend.result }}" == "failure" ]] && [[ "${{ inputs.build_backend }}" == "true" ]] && echo "  - build-backend"
+          [[ "${{ needs.build-frontend.result }}" == "failure" ]] && [[ "${{ inputs.build_frontend }}" == "true" ]] && echo "  - build-frontend"
+          exit 1
