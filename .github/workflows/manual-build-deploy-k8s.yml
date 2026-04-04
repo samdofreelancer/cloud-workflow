@@ -78,24 +78,24 @@ jobs:
       image: ${{ steps.image.outputs.backend-image }}
     steps:
       - name: Checkout Money Keeper repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@2d7a78242d6006496f3475ba65844425da6cf932
         with:
           repository: ${{ inputs.money_keeper_repo }}
           ref: ${{ inputs.money_keeper_ref }}
 
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@7bfa3a4717ef143a604ee2996c374e453c8aabc2
         with:
           app-id: ${{ vars.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@d70bba72b1f3fd22344832f00baa7d52d2f3343f
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@0d4c9c5ea7693da7b8eca376c53e1531b89c76bd
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -103,7 +103,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8acb6e3a38ab856
         with:
           images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
           tags: |
@@ -111,7 +111,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push backend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@15560696de488e5b51efb7b194c2f3e92c85d8ef
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -140,24 +140,24 @@ jobs:
       image: ${{ steps.image.outputs.frontend-image }}
     steps:
       - name: Checkout Money Keeper repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@2d7a78242d6006496f3475ba65844425da6cf932
         with:
           repository: ${{ inputs.money_keeper_repo }}
           ref: ${{ inputs.money_keeper_ref }}
 
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@7bfa3a4717ef143a604ee2996c374e453c8aabc2
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@d70bba72b1f3fd22344832f00baa7d52d2f3343f
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@0d4c9c5ea7693da7b8eca376c53e1531b89c76bd
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -165,7 +165,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8acb6e3a38ab856
         with:
           images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
           tags: |
@@ -173,7 +173,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push frontend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@15560696de488e5b51efb7b194c2f3e92c85d8ef
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
@@ -198,7 +198,7 @@ jobs:
       url: https://${{ steps.env_vars.outputs.app_url }}
     steps:
       - name: Checkout cloud-workflow repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@2d7a78242d6006496f3475ba65844425da6cf932
 
       - name: Set environment variables
         id: env_vars
@@ -228,12 +228,12 @@ jobs:
           echo "replicas=${REPLICAS}" >> $GITHUB_OUTPUT
 
       - name: Configure kubectl
-        uses: azure/setup-kubectl@v3
+        uses: azure/setup-kubectl@9ab432518bf9b48a0db50d1ba6ebf9b3f2d7be5c
         with:
           version: 'v1.28.0'
 
       - name: Set up Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@a8cf0fbc14eb0bde5c87aa4d996c32c5ccf0db28
         with:
           version: 'v3.13.0'
 
@@ -446,7 +446,7 @@ jobs:
 
       - name: Post deployment notification
         if: always()
-        uses: slackapi/slack-github-action@v1
+        uses: slackapi/slack-github-action@6c661ce58e9a8a6c1a34a56d10c8a3a4c5d3f4e8
         with:
           payload: |
             {
