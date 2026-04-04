@@ -69,11 +69,9 @@ jobs:
     needs: setup
     if: ${{ inputs.build_backend == true }}
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
     permissions:
       contents: read
       packages: write
-      id-token: write
     outputs:
       image: ${{ steps.image.outputs.backend-image }}
     steps:
@@ -123,11 +121,9 @@ jobs:
     needs: setup
     if: ${{ inputs.build_frontend == true }}
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
     permissions:
       contents: read
       packages: write
-      id-token: write
     outputs:
       image: ${{ steps.image.outputs.frontend-image }}
     steps:
