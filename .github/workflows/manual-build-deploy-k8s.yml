@@ -72,6 +72,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     outputs:
       image: ${{ steps.image.outputs.backend-image }}
     steps:
@@ -124,6 +125,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     outputs:
       image: ${{ steps.image.outputs.frontend-image }}
     steps:
