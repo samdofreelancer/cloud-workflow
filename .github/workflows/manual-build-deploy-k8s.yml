@@ -83,14 +83,6 @@ jobs:
           repository: ${{ inputs.money_keeper_repo }}
           ref: ${{ inputs.money_keeper_ref }}
 
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@7bfa3a4717ef143a604ee2996c374e453c8aabc2
-        with:
-          app-id: ${{ vars.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d70bba72b1f3fd22344832f00baa7d52d2f3343f
 
@@ -99,7 +91,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ steps.app-token.outputs.token }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
@@ -145,14 +137,6 @@ jobs:
           repository: ${{ inputs.money_keeper_repo }}
           ref: ${{ inputs.money_keeper_ref }}
 
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@7bfa3a4717ef143a604ee2996c374e453c8aabc2
-        with:
-          app-id: ${{ secrets.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d70bba72b1f3fd22344832f00baa7d52d2f3343f
 
@@ -161,7 +145,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ steps.app-token.outputs.token }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
