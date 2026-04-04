@@ -151,7 +151,7 @@ jobs:
 
       - name: Scan image with Trivy
         if: ${{ steps.build.conclusion == 'success' }}
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.24.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ matrix.image_name }}:${{ steps.image_tags.outputs.image_tag }}
           format: table
