@@ -1,0 +1,18 @@
+apiVersion: v2
+name: money-keeper
+description: A Helm chart for Money Keeper (Backend + Frontend) deployment to Kubernetes
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - money-keeper
+  - spring-boot
+  - vue
+  - ddd
+maintainers:
+  - name: Money Keeper Team
+    email: team@example.com
+home: https://github.com/samdofreelancer/money-keeper
+sources:
+  - https://github.com/samdofreelancer/money-keeper
+dependencies: []

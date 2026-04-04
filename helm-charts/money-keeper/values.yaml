@@ -1,0 +1,238 @@
+# Default values for money-keeper Helm chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into templates.
+
+environment: dev
+
+# Global settings
+global:
+  imagePullSecrets:
+    - name: ghcr-secret
+
+# Backend Service Configuration
+backend:
+  enabled: true
+  
+  image:
+    repository: ghcr.io/samdofreelancer/money-keeper-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 2
+  
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+    annotations: {}
+  
+  # Environment variables
+  env:
+    SPRING_PROFILE: "prod"
+    SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
+    SERVER_SERVLET_CONTEXT_PATH: "/api"
+  
+  # Config references
+  configMap: money-keeper-backend-config
+  secretRef: money-keeper-db-secret
+  
+  # Resource scaling
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+  
+  # Pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  
+  # Health checks
+  healthCheck:
+    enabled: true
+    livenessProbe:
+      path: /api/actuator/health
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readinessProbe:
+      path: /api/actuator/health/readiness
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 2
+  
+  # Autoscaling
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+  
+  # Pod annotations and labels
+  podAnnotations: {}
+  podLabels: {}
+  
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+    capabilities:
+      drop:
+        - ALL
+
+# Frontend Service Configuration
+frontend:
+  enabled: true
+  
+  image:
+    repository: ghcr.io/samdofreelancer/money-keeper-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 2
+  
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 80
+    annotations: {}
+  
+  # Environment variables
+  env:
+    VITE_BACKEND_HOST: "http://money-keeper-backend-service:8080/api"
+    NODE_ENV: "production"
+  
+  # Resource scaling
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "200m"
+  
+  # Pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  
+  # Health checks
+  healthCheck:
+    enabled: true
+    livenessProbe:
+      path: /
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    readinessProbe:
+      path: /
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 2
+      failureThreshold: 2
+  
+  # Autoscaling
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 80
+  
+  # Pod annotations and labels
+  podAnnotations: {}
+  podLabels: {}
+  
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    fsGroup: 101
+    capabilities:
+      drop:
+        - ALL
+
+# Ingress Configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: money-keeper-dev.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: money-keeper-tls
+      hosts:
+        - money-keeper-dev.example.com
+
+# Database Configuration (external database)
+database:
+  enabled: false
+  # Assuming external managed database
+  # Use ConfigMap and Secrets instead
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: money-keeper
+
+# Network Policy
+networkPolicy:
+  enabled: false
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            role: frontend
+      ports:
+      - protocol: TCP
+        port: 8080
+
+# Pod Security Policy
+podSecurityPolicy:
+  enabled: false
+  name: money-keeper-psp
+
+# Monitoring (Prometheus)
+monitoring:
+  enabled: false
+  prometheus:
+    enabled: false
+    interval: 30s
+
+# Backup and restoration
+backup:
+  enabled: false
+  schedule: "0 2 * * *"  # Daily at 2 AM
+
+# Logging
+logging:
+  level: INFO
+
+# Node affinity and pod affinity rules
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - money-keeper-backend
+                  - money-keeper-frontend
+          topologyKey: kubernetes.io/hostname

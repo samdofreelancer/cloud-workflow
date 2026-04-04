@@ -1,0 +1,64 @@
+# Staging Environment Values Override
+environment: staging
+
+backend:
+  replicaCount: 2
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+  healthCheck:
+    livenessProbe:
+      initialDelaySeconds: 45
+      periodSeconds: 15
+
+frontend:
+  replicaCount: 2
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "200m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 75
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: money-keeper-staging.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: money-keeper-staging-tls
+      hosts:
+        - money-keeper-staging.example.com
+
+database:
+  enabled: false
+  host: "postgres-staging.example.com"
+  port: 5432
+  name: "money_keeper_staging"
+
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    interval: 60s

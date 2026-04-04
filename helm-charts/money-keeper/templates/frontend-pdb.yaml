@@ -1,0 +1,15 @@
+{{- if .Values.frontend.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "money-keeper.fullname" . }}-frontend-pdb
+  labels:
+    {{- include "money-keeper.labels" . | nindent 4 }}
+    app: {{ include "money-keeper.fullname" . }}-frontend
+spec:
+  minAvailable: {{ .Values.frontend.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "money-keeper.selectorLabels" . | nindent 6 }}
+      app: {{ include "money-keeper.fullname" . }}-frontend
+{{- end }}

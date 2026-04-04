@@ -1,0 +1,32 @@
+# Ignore patterns
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.env
+.env.local
+*.log
+tmp/
+temp/
+
+# Kubernetes resource artifacts
+helm-charts/money-keeper/requirements.lock
+helm-charts/money-keeper/charts/
+
+# Generated files
+*.kubeconfig
+values-override.yaml
+override-values.yaml
+/tmp/
+
+# Local test files
+test-results/
+test-logs/
+
+# IDE
+*.iml
+
+# OS
+Thumbs.db

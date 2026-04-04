@@ -1,0 +1,23 @@
+{{- if .Values.frontend.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "money-keeper.fullname" . }}-frontend-service
+  labels:
+    {{- include "money-keeper.labels" . | nindent 4 }}
+    app: {{ include "money-keeper.fullname" . }}-frontend
+  {{- with .Values.frontend.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.frontend.service.type }}
+  selector:
+    {{- include "money-keeper.selectorLabels" . | nindent 4 }}
+    app: {{ include "money-keeper.fullname" . }}-frontend
+  ports:
+    - port: {{ .Values.frontend.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+{{- end }}
