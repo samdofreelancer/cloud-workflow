@@ -1,4 +1,4 @@
-name: Manual Build & Deploy Money Keeper to K8s
+name: Deploy Money Keeper to K8s
 
 on:
   workflow_dispatch:
@@ -12,168 +12,17 @@ on:
           - staging
           - production
         default: 'dev'
-      build_backend:
-        description: 'Build backend image'
-        required: false
-        type: boolean
-        default: true
-      build_frontend:
-        description: 'Build frontend image'
-        required: false
-        type: boolean
-        default: true
-      deploy:
-        description: 'Deploy to Kubernetes'
-        required: false
-        type: boolean
-        default: true
-      image_tag:
-        description: 'Docker image tag (default: commit SHA or manual tag)'
-        required: false
+      backend_image:
+        description: 'Backend image (e.g., ghcr.io/samdofreelancer/money-keeper-backend:latest)'
+        required: true
         type: string
-        default: ''
-      money_keeper_repo:
-        description: 'Money Keeper repository to build from'
-        required: false
+      frontend_image:
+        description: 'Frontend image (e.g., ghcr.io/samdofreelancer/money-keeper-frontend:latest)'
+        required: true
         type: string
-        default: 'samdofreelancer/money-keeper'
-      money_keeper_ref:
-        description: 'Branch/ref to checkout from Money Keeper repo'
-        required: false
-        type: string
-        default: 'master'
-
-env:
-  REGISTRY: ghcr.io
-  BACKEND_IMAGE_NAME: samdofreelancer/money-keeper-backend
-  FRONTEND_IMAGE_NAME: samdofreelancer/money-keeper-frontend
 
 jobs:
-  setup:
-    runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ steps.set_tag.outputs.tag }}
-    steps:
-      - name: Set image tag
-        id: set_tag
-        run: |
-          if [ -z "${{ inputs.image_tag }}" ]; then
-            TAG="$(date +%Y%m%d-%H%M%S)-${{ github.run_id }}"
-          else
-            TAG="${{ inputs.image_tag }}"
-          fi
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "Using image tag: ${TAG}"
-
-  build-backend:
-    needs: setup
-    if: ${{ inputs.build_backend == true }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      image: ${{ steps.image.outputs.backend-image }}
-    steps:
-      - name: Checkout Money Keeper repository
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.money_keeper_repo }}
-          ref: ${{ inputs.money_keeper_ref }}
-          token: ${{ github.token }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT || github.token }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ needs.setup.outputs.image_tag }}
-            type=raw,value=latest
-
-      - name: Build and push backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Output backend image path
-        id: image
-        run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}"
-          echo "backend-image=${IMAGE}" >> $GITHUB_OUTPUT
-
-  build-frontend:
-    needs: setup
-    if: ${{ inputs.build_frontend == true }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      image: ${{ steps.image.outputs.frontend-image }}
-    steps:
-      - name: Checkout Money Keeper repository
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.money_keeper_repo }}
-          ref: ${{ inputs.money_keeper_ref }}
-          token: ${{ github.token }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT || github.token }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ needs.setup.outputs.image_tag }}
-            type=raw,value=latest
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Output frontend image path
-        id: image
-        run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}"
-          echo "frontend-image=${IMAGE}" >> $GITHUB_OUTPUT
-
   deploy-to-k8s:
-    needs: [setup, build-backend, build-frontend]
-    if: ${{ inputs.deploy == true }}
     runs-on: ubuntu-latest
     environment: 
       name: ${{ inputs.environment }}
@@ -235,9 +84,9 @@ jobs:
       - name: Create image pull secret
         run: |
           kubectl create secret docker-registry ghcr-secret \
-            --docker-server=${{ env.REGISTRY }} \
+            --docker-server=ghcr.io \
             --docker-username=${{ github.actor }} \
-            --docker-password=${{ secrets.GITHUB_TOKEN }} \
+            --docker-password=${{ secrets.GHCR_PAT || github.token }} \
             --docker-email=${{ github.actor }}@users.noreply.github.com \
             -n ${{ steps.env_vars.outputs.namespace }} \
             --dry-run=client -o yaml | kubectl apply -f -
@@ -271,7 +120,7 @@ jobs:
           
           backend:
             image:
-              repository: ${{ needs.build-backend.outputs.image }}
+              repository: ${{ inputs.backend_image }}
               tag: ""
               pullPolicy: IfNotPresent
             replicaCount: ${{ steps.env_vars.outputs.replicas }}
@@ -303,7 +152,7 @@ jobs:
           
           frontend:
             image:
-              repository: ${{ needs.build-frontend.outputs.image }}
+              repository: ${{ inputs.frontend_image }}
               tag: ""
               pullPolicy: IfNotPresent
             replicaCount: ${{ steps.env_vars.outputs.replicas }}
@@ -416,13 +265,12 @@ jobs:
           ║ Environment:     ${{ inputs.environment }}
           ║ Namespace:       ${{ steps.env_vars.outputs.namespace }}
           ║ Release Name:    ${{ steps.env_vars.outputs.release_name }}
-          ║ Image Tag:       ${{ needs.setup.outputs.image_tag }}
           ║ Replicas:        ${{ steps.env_vars.outputs.replicas }}
           ║ App URL:         https://${{ steps.env_vars.outputs.app_url }}
           ║ 
           ║ Deployed Images:
-          ║   Backend:       ${{ needs.build-backend.outputs.image }}
-          ║   Frontend:      ${{ needs.build-frontend.outputs.image }}
+          ║   Backend:       ${{ inputs.backend_image }}
+          ║   Frontend:      ${{ inputs.frontend_image }}
           ╚════════════════════════════════════════════════════════════╝
           EOF
 
@@ -438,7 +286,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*Deployment ${{ job.status }}*\n\nEnvironment: *${{ inputs.environment }}*\nImage Tag: `${{ needs.setup.outputs.image_tag }}`\nApp URL: https://${{ steps.env_vars.outputs.app_url }}"
+                    "text": "*Deployment ${{ job.status }}*\n\nEnvironment: *${{ inputs.environment }}*\nBackend Image: `${{ inputs.backend_image }}`\nFrontend Image: `${{ inputs.frontend_image }}`\nApp URL: https://${{ steps.env_vars.outputs.app_url }}"
                   }
                 }
               ]

@@ -1,0 +1,158 @@
+name: Build Money Keeper Docker Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_backend:
+        description: 'Build backend image'
+        required: false
+        type: boolean
+        default: true
+      build_frontend:
+        description: 'Build frontend image'
+        required: false
+        type: boolean
+        default: true
+      image_tag:
+        description: 'Docker image tag (default: commit SHA or manual tag)'
+        required: false
+        type: string
+        default: ''
+      money_keeper_repo:
+        description: 'Money Keeper repository to build from'
+        required: false
+        type: string
+        default: 'samdofreelancer/money-keeper'
+      money_keeper_ref:
+        description: 'Branch/ref to checkout from Money Keeper repo'
+        required: false
+        type: string
+        default: 'master'
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE_NAME: samdofreelancer/money-keeper-backend
+  FRONTEND_IMAGE_NAME: samdofreelancer/money-keeper-frontend
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.set_tag.outputs.tag }}
+    steps:
+      - name: Set image tag
+        id: set_tag
+        run: |
+          if [ -z "${{ inputs.image_tag }}" ]; then
+            TAG="$(date +%Y%m%d-%H%M%S)-${{ github.run_id }}"
+          else
+            TAG="${{ inputs.image_tag }}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Using image tag: ${TAG}"
+
+  build-backend:
+    needs: setup
+    if: ${{ inputs.build_backend == true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.backend-image }}
+    steps:
+      - name: Checkout Money Keeper repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.money_keeper_repo }}
+          ref: ${{ inputs.money_keeper_ref }}
+          token: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT || github.token }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Output backend image path
+        id: image
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}"
+          echo "backend-image=${IMAGE}" >> $GITHUB_OUTPUT
+
+  build-frontend:
+    needs: setup
+    if: ${{ inputs.build_frontend == true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.frontend-image }}
+    steps:
+      - name: Checkout Money Keeper repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.money_keeper_repo }}
+          ref: ${{ inputs.money_keeper_ref }}
+          token: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT || github.token }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Output frontend image path
+        id: image
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}"
+          echo "frontend-image=${IMAGE}" >> $GITHUB_OUTPUT
