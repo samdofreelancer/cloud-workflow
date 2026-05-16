@@ -31,7 +31,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@e2f20c305c34d93f5c5edf45df8f7ef2d4bcc075  # v4
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0
 

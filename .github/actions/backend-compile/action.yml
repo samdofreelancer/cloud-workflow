@@ -19,7 +19,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@e2f20c305c34d93f5c5edf45df8f7ef2d4bcc075  # v4
+    - uses: actions/checkout@v4
 
     - uses: actions/cache@f52c685a2d5760ebc2b7a956fb28519a98a11f1c  # v4
       with:
