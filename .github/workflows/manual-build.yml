@@ -1,4 +1,5 @@
 name: Build Money Keeper Docker Images
+run-name: Build ${{ inputs.money_keeper_ref }} by ${{ github.actor }}
 
 on:
   workflow_dispatch:
@@ -14,145 +15,244 @@ on:
         type: boolean
         default: true
       image_tag:
-        description: 'Docker image tag (default: commit SHA or manual tag)'
+        description: 'Docker image tag (default: timestamp + commit SHA)'
         required: false
         type: string
         default: ''
       money_keeper_repo:
-        description: 'Money Keeper repository to build from'
+        description: 'Repository to build from'
         required: false
         type: string
         default: 'samdofreelancer/money-keeper'
       money_keeper_ref:
-        description: 'Branch/ref to checkout from Money Keeper repo'
+        description: 'Branch/ref to checkout'
         required: false
         type: string
         default: 'master'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-build-${{ github.workflow }}-${{ inputs.money_keeper_ref }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
   BACKEND_IMAGE_NAME: samdofreelancer/money-keeper-backend
   FRONTEND_IMAGE_NAME: samdofreelancer/money-keeper-frontend
+  # Force GitHub Actions to use Node.js 24 instead of deprecated Node.js 20
+  # Remove this line after June 2, 2026 when Node.js 20 support is fully deprecated
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   setup:
     runs-on: ubuntu-latest
     outputs:
-      image_tag: ${{ steps.set_tag.outputs.tag }}
+      provided_image_tag: ${{ steps.set_tag.outputs.provided_image_tag }}
+      timestamp: ${{ steps.set_tag.outputs.timestamp }}
+      latest_tag: ${{ steps.set_tag.outputs.latest_tag }}
+      safe_repo_name: ${{ steps.sanitize.outputs.safe_repo_name }}
     steps:
-      - name: Set image tag
+      - id: sanitize
+        run: |
+          SAFE_NAME=$(echo "${{ inputs.money_keeper_repo }}" | sed 's/\//-/g')
+          echo "safe_repo_name=$SAFE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Determine timestamp and latest tag
         id: set_tag
         run: |
-          if [ -z "${{ inputs.image_tag }}" ]; then
-            TAG="$(date +%Y%m%d-%H%M%S)-${{ github.run_id }}"
-          else
-            TAG="${{ inputs.image_tag }}"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          PROVIDED_IMAGE_TAG="${{ inputs.image_tag }}"
+          LATEST_TAG=""
+          if [[ "${{ inputs.money_keeper_ref }}" == "master" || "${{ inputs.money_keeper_ref }}" == "main" ]]; then
+            LATEST_TAG="latest"
           fi
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "Using image tag: ${TAG}"
+          echo "provided_image_tag=${PROVIDED_IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
+          echo "Computed timestamp=${TIMESTAMP}"
+          [[ -n "$LATEST_TAG" ]] && echo "Latest tag will be published" || echo "Latest tag will NOT be published"
 
-  build-backend:
+  build-images:
     needs: setup
-    if: ${{ inputs.build_backend == true }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    outputs:
-      image: ${{ steps.image.outputs.backend-image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+            image_name: samdofreelancer/money-keeper-backend
+          - service: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+            image_name: samdofreelancer/money-keeper-frontend
     steps:
-      - name: Checkout Money Keeper repository
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.1
         with:
           repository: ${{ inputs.money_keeper_repo }}
           ref: ${{ inputs.money_keeper_ref }}
+          # ⚠️  github.token only works for public repos or repos within the same organization
+          # For private cross-org repos, use secrets.GITHUB_PAT with 'repo' scope instead
           token: ${{ github.token }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v3.6.1
 
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
+      - name: Determine image tags
+        id: image_tags
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TIMESTAMP=${{ needs.setup.outputs.timestamp }}
+          PROVIDED="${{ needs.setup.outputs.provided_image_tag }}"
+          IMAGE_TAG=${PROVIDED:-${TIMESTAMP}-${SHORT_SHA}}
+          SHA_TAG="sha-${SHORT_SHA}"
+          TIMESTAMP_TAG="ts-${TIMESTAMP}"
+          LATEST_TAG="${{ needs.setup.outputs.latest_tag }}"
+          TAGS="type=raw,value=${IMAGE_TAG}\ntype=raw,value=${SHA_TAG}\ntype=raw,value=${TIMESTAMP_TAG}"
+          [[ -n "$LATEST_TAG" ]] && TAGS="${TAGS}\ntype=raw,value=${LATEST_TAG}"
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "sha_tag=${SHA_TAG}" >> $GITHUB_OUTPUT
+          echo "timestamp_tag=${TIMESTAMP_TAG}" >> $GITHUB_OUTPUT
+          echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
+          echo "tags<<EOF" >> $GITHUB_OUTPUT
+          printf '%b\n' "$TAGS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3.3.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
+          # Primary: Use GHCR_PAT for explicit, controlled access (requires setup in repo secrets)
+          # Fallback: Use GITHUB_TOKEN if GHCR_PAT not configured (less secure for cross-org repos)
           password: ${{ secrets.GHCR_PAT || github.token }}
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v5.5.1
         with:
-          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ needs.setup.outputs.image_tag }}
-            type=raw,value=latest
+          images: ${{ env.REGISTRY }}/${{ matrix.image_name }}
+          tags: ${{ steps.image_tags.outputs.tags }}
 
-      - name: Build and push backend image
-        uses: docker/build-push-action@v5
+      - name: Build and push multi-arch image
+        id: build
+        if: ${{ (matrix.service == 'backend' && inputs.build_backend) || (matrix.service == 'frontend' && inputs.build_frontend) }}
+        uses: docker/build-push-action@v5.4.0
         with:
-          context: ./backend
-          file: ./backend/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Output backend image path
-        id: image
-        run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}"
-          echo "backend-image=${IMAGE}" >> $GITHUB_OUTPUT
+      - name: Scan image with Trivy
+        if: ${{ steps.build.conclusion == 'success' }}
+        uses: aquasecurity/trivy-action@v0.24.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ matrix.image_name }}:${{ steps.image_tags.outputs.image_tag }}
+          format: table
+          scan-type: image
+          severity: CRITICAL
+          exit-code: '1'
 
-  build-frontend:
-    needs: setup
-    if: ${{ inputs.build_frontend == true }}
+      - name: Save service summary
+        if: always()
+        run: |
+          RESULT="${{ steps.build.outcome }}"
+          [[ "$RESULT" == "failure" ]] && RESULT="failed"
+          IMAGE_REF="${{ env.REGISTRY }}/${{ matrix.image_name }}:${{ steps.image_tags.outputs.image_tag }}"
+          SHA_REF="${{ env.REGISTRY }}/${{ matrix.image_name }}:${{ steps.image_tags.outputs.sha_tag }}"
+          TIMESTAMP_REF="${{ env.REGISTRY }}/${{ matrix.image_name }}:${{ steps.image_tags.outputs.timestamp_tag }}"
+          LATEST_REF=""
+          LATEST_PUBLISHED=false
+          if [[ "${{ steps.image_tags.outputs.latest_tag }}" == "latest" && "$RESULT" == "success" ]]; then
+            LATEST_REF="${{ env.REGISTRY }}/${{ matrix.image_name }}:latest"
+            LATEST_PUBLISHED=true
+          fi
+          cat > build-summary-${{ matrix.service }}.json <<EOF
+          {
+            "service": "${{ matrix.service }}",
+            "build_result": "${RESULT}",
+            "image_ref": "${IMAGE_REF}",
+            "sha_ref": "${SHA_REF}",
+            "timestamp_ref": "${TIMESTAMP_REF}",
+            "latest_ref": "${LATEST_REF}",
+            "latest_published": ${LATEST_PUBLISHED}
+          }
+          EOF
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.service }}-summary
+          path: build-summary-${{ matrix.service }}.json
+
+  build-summary:
+    needs: [setup, build-images]
+    if: always()
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      image: ${{ steps.image.outputs.frontend-image }}
     steps:
-      - name: Checkout Money Keeper repository
-        uses: actions/checkout@v4
+      - name: Download service summaries
+        uses: actions/download-artifact@v4
         with:
-          repository: ${{ inputs.money_keeper_repo }}
-          ref: ${{ inputs.money_keeper_ref }}
-          token: ${{ github.token }}
+          path: summaries
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT || github.token }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ needs.setup.outputs.image_tag }}
-            type=raw,value=latest
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Output frontend image path
-        id: image
+      - name: Render build summary
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          BACKEND_IMAGE_NAME: ${{ env.BACKEND_IMAGE_NAME }}
+          FRONTEND_IMAGE_NAME: ${{ env.FRONTEND_IMAGE_NAME }}
+          LATEST_TAG: ${{ needs.setup.outputs.latest_tag }}
         run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}"
-          echo "frontend-image=${IMAGE}" >> $GITHUB_OUTPUT
+          python3 <<'PY' > /tmp/build-summary.md
+          import json, os
+          from pathlib import Path
+
+          services = ['backend', 'frontend']
+
+          def read_summary(service):
+              path = Path(f'summaries/build-{service}-summary/build-summary-{service}.json')
+              if path.exists():
+                  return json.loads(path.read_text())
+              return {
+                  'service': service,
+                  'build_result': 'skipped',
+                  'image_ref': f"{os.environ['REGISTRY']}/{os.environ[f'{service.upper()}_IMAGE_NAME']}:n/a",
+                  'sha_ref': 'n/a',
+                  'timestamp_ref': 'n/a',
+                  'latest_ref': '',
+                  'latest_published': False,
+              }
+
+          summaries = {s: read_summary(s) for s in services}
+
+          image_tag = next((summaries[s]['image_ref'].split(':')[-1] for s in services if not summaries[s]['image_ref'].endswith(':n/a')), 'n/a')
+
+          lines = [
+              '## Build Summary', '', f'- **Image Tag:** {image_tag}', f'- **Latest published:** {os.environ.get("LATEST_TAG", "n/a")}', '', '### Service status'
+          ]
+          for service in services:
+              lines.append(f'- **{service.capitalize()}:** {summaries[service]["build_result"]}')
+          lines += ['', '### Image references']
+          for service in services:
+              s = summaries[service]
+              lines.append(f'- **{service.capitalize()}:** {s["image_ref"]}')
+              lines.append(f'  - SHA tag: {s["sha_ref"]}')
+              lines.append(f'  - Timestamp tag: {s["timestamp_ref"]}')
+              if s['latest_published']:
+                  lines.append(f'  - Latest tag: {s["latest_ref"]}')
+          lines += ['', '### Notes', '- `latest` is published only for main/master branch builds.', '- Vulnerability scan runs after each pushed image.', '- Skipped services are marked as skipped.']
+          Path('/tmp/build-summary.md').write_text('\n'.join(lines)+'\n')
+          PY
+          cat /tmp/build-summary.md >> $GITHUB_STEP_SUMMARY
