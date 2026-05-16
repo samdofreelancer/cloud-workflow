@@ -31,22 +31,56 @@ runs:
 
     - name: Compile source
       shell: bash
-      run: mvn clean compile -DskipTests -Djacoco.skip=false -Dmaven.repo.local=$HOME/.m2/repository --batch-mode --errors
+      run: |
+        echo "Starting Maven compile..."
+        echo "Maven version:"
+        mvn --version
+        echo ""
+        echo "Running: mvn clean compile -DskipTests -Djacoco.skip=false -Dmaven.repo.local=$HOME/.m2/repository --batch-mode --errors"
+        mvn clean compile \
+          -DskipTests \
+          -Djacoco.skip=false \
+          -Dmaven.repo.local=$HOME/.m2/repository \
+          --batch-mode \
+          --errors \
+          -Dorg.slf4j.simpleLogger.defaultLogLevel=info || {
+          echo "Maven failed with exit code $?"
+          exit 1
+        }
+        echo "Maven compile completed successfully"
       working-directory: ${{ inputs.backend-dir }}
 
     - name: Debug - Check m2 after compile
       shell: bash
       run: |
-        echo "Checking m2 repository at $HOME/.m2/repository:"
-        if [ -d "$HOME/.m2/repository" ]; then
-          echo "✓ m2 repository exists"
-          du -sh "$HOME/.m2/repository"
-          ls -la "$HOME/.m2/repository" | head -20
+        echo "=== Maven Build Results ==="
+        echo "Working directory: $PWD"
+        echo "HOME: $HOME"
+        echo ""
+        echo "=== Target directory contents ==="
+        if [ -d "target" ]; then
+          du -sh target/
+          ls -lah target/ | head -30
         else
-          echo "✗ m2 repository NOT found"
-          echo "HOME is: $HOME"
-          ls -la "$HOME"
+          echo "No target directory"
         fi
+        echo ""
+        echo "=== M2 Repository ==="
+        if [ -d "$HOME/.m2/repository" ]; then
+          echo "✓ m2 repository exists at $HOME/.m2/repository"
+          du -sh "$HOME/.m2/repository"
+          echo ""
+          echo "First 20 items in m2:"
+          ls -lah "$HOME/.m2/repository" | head -20
+        else
+          echo "✗ m2 repository NOT found at $HOME/.m2/repository"
+          echo ""
+          echo "HOME contents:"
+          ls -lah "$HOME"
+        fi
+        echo ""
+        echo "=== pom.xml location ==="
+        ls -la pom.xml
 
     - uses: actions/upload-artifact@v4
       with:
