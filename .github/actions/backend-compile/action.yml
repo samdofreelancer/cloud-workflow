@@ -21,19 +21,24 @@ runs:
   steps:
     - uses: actions/checkout@v4
 
-    - uses: actions/cache@v4
-      with:
-        path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ hashFiles(format('{0}/pom.xml', inputs.backend-dir)) }}
-        restore-keys: ${{ runner.os }}-maven-
-
     - name: Compile source
       shell: bash
       run: mvn clean compile -DskipTests -Djacoco.skip=false --batch-mode --errors
       working-directory: ${{ inputs.backend-dir }}
+      env:
+        MAVEN_OPTS: -Dmaven.repo.local=${{ github.workspace }}/.m2/repository
 
     - uses: actions/upload-artifact@v4
       with:
         name: build-${{ inputs.sha-short }}
         path: ${{ inputs.backend-dir }}/target/
         retention-days: 1
+
+    - uses: actions/upload-artifact@v4
+      if: always()
+      continue-on-error: true
+      with:
+        name: m2-repository-${{ hashFiles(format('{0}/pom.xml', inputs.backend-dir)) }}
+        path: ${{ github.workspace }}/.m2/repository
+        retention-days: 7
+        if-no-files-found: ignore
