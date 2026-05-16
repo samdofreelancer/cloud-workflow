@@ -21,12 +21,30 @@ runs:
   steps:
     - uses: actions/checkout@v4
 
+    - name: Debug - Check workspace
+      shell: bash
+      run: |
+        echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+        echo "PWD: $PWD"
+        echo "Contents of workspace:"
+        ls -la "${{ github.workspace }}"
+
     - name: Compile source
       shell: bash
-      run: mvn clean compile -DskipTests -Djacoco.skip=false --batch-mode --errors
+      run: mvn clean compile -DskipTests -Djacoco.skip=false -Dmaven.repo.local="${{ github.workspace }}/.m2/repository" --batch-mode --errors
       working-directory: ${{ inputs.backend-dir }}
-      env:
-        MAVEN_OPTS: -Dmaven.repo.local=${{ github.workspace }}/.m2/repository
+
+    - name: Debug - Check m2 after compile
+      shell: bash
+      run: |
+        echo "Checking m2 repository:"
+        if [ -d "${{ github.workspace }}/.m2/repository" ]; then
+          echo "✓ m2 repository exists"
+          du -sh "${{ github.workspace }}/.m2/repository"
+          find "${{ github.workspace }}/.m2/repository" -type d | head -10
+        else
+          echo "✗ m2 repository NOT found"
+        fi
 
     - uses: actions/upload-artifact@v4
       with:
