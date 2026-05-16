@@ -30,7 +30,7 @@ runs:
         key: ${{ runner.os }}-maven-${{ hashFiles(format('{0}/pom.xml', inputs.backend-dir)) }}
         restore-keys: ${{ runner.os }}-maven-
 
-    - uses: actions/download-artifact@9bc31d5ccc31df885eaab2b51d21c313f25284925  # v4
+    - uses: actions/download-artifact@v4
       with:
         name: build-${{ inputs.sha-short }}
         path: ${{ inputs.backend-dir }}/target/
@@ -54,12 +54,12 @@ runs:
         path: ${{ inputs.backend-dir }}/target/surefire-reports/
         retention-days: 5
 
-    - uses: actions/download-artifact@9bc31d5ccc31df885eaab2b51d21c313f25284925  # v4
+    - uses: actions/download-artifact@v4
       if: always()
       with:
         path: reports/
 
-    - uses: EnricoMi/publish-unit-test-result-action@9ab0244aac22c94290f1d57a1526375b71d45e7d  # v2
+    - uses: EnricoMi/publish-unit-test-result-action@v2
       if: always()
       with:
         files: reports/tests-**/TEST-*.xml

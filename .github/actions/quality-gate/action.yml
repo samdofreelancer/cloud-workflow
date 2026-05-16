@@ -41,17 +41,17 @@ runs:
         key: ${{ runner.os }}-maven-${{ hashFiles(format('{0}/pom.xml', inputs.backend-dir)) }}
         restore-keys: ${{ runner.os }}-maven-
 
-    - uses: actions/download-artifact@9bc31d5ccc31df885eaab2b51d21c313f25284925  # v4
+    - uses: actions/download-artifact@v4
       with:
         name: build-${{ inputs.sha-short }}
         path: ${{ inputs.backend-dir }}/target/
 
-    - uses: actions/download-artifact@9bc31d5ccc31df885eaab2b51d21c313f25284925  # v4
+    - uses: actions/download-artifact@v4
       with:
         name: coverage-unit-${{ inputs.sha-short }}
         path: ${{ inputs.backend-dir }}/target/coverage-unit/
 
-    - uses: actions/download-artifact@9bc31d5ccc31df885eaab2b51d21c313f25284925  # v4
+    - uses: actions/download-artifact@v4
       with:
         name: coverage-integration-${{ inputs.sha-short }}
         path: ${{ inputs.backend-dir }}/target/coverage-integration/
