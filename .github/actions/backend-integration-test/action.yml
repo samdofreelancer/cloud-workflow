@@ -77,4 +77,4 @@ runs:
       with:
         files: reports/tests-**/TEST-*.xml
         check_name: Integration Tests
-        comment_mode: always
+        comment_mode: off

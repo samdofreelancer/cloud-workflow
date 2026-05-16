@@ -19,7 +19,7 @@ runs:
       with:
         files: reports/tests-**/TEST-*.xml
         check_name: Backend Tests
-        comment_mode: always
+        comment_mode: off
 
     - uses: actions/upload-artifact@v4
       with:
