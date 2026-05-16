@@ -1,0 +1,39 @@
+name: Backend Compile
+description: Compile backend source code with Maven
+author: Money Keeper Team
+
+inputs:
+  backend-dir:
+    description: Backend directory path
+    required: false
+    default: ./backend
+  sha-short:
+    description: Short Git SHA for artifact naming
+    required: true
+
+outputs:
+  build-artifact-name:
+    description: Name of the compiled build artifact
+    value: build-${{ inputs.sha-short }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@e2f20c305c34d93f5c5edf45df8f7ef2d4bcc075  # v4
+
+    - uses: actions/cache@f52c685a2d5760ebc2b7a956fb28519a98a11f1c  # v4
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles(format('{0}/pom.xml', inputs.backend-dir)) }}
+        restore-keys: ${{ runner.os }}-maven-
+
+    - name: Compile source
+      shell: bash
+      run: mvn clean compile -DskipTests -Djacoco.skip=false --batch-mode --errors
+      working-directory: ${{ inputs.backend-dir }}
+
+    - uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5d  # v4
+      with:
+        name: build-${{ inputs.sha-short }}
+        path: ${{ inputs.backend-dir }}/target/
+        retention-days: 1

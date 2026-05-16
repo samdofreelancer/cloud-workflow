@@ -1,0 +1,43 @@
+name: Detect Backend Changes
+description: Detect changes in backend or workflow files
+author: Money Keeper Team
+
+inputs:
+  backend-dir:
+    description: Backend directory path
+    required: false
+    default: ./backend
+
+outputs:
+  has-changes:
+    description: Whether backend or workflow files have changed
+    value: ${{ steps.detect.outputs.has-changes }}
+  sha-short:
+    description: Short Git SHA
+    value: ${{ steps.detect.outputs.sha-short }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@e2f20c305c34d93f5c5edf45df8f7ef2d4bcc075  # v4
+      with:
+        fetch-depth: 0
+
+    - name: Detect changes
+      id: detect
+      shell: bash
+      run: |
+        SHA_SHORT=$(git rev-parse --short HEAD)
+        echo "sha-short=$SHA_SHORT" >> $GITHUB_OUTPUT
+        
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          CHANGES=$(git diff --name-only origin/${{ github.base_ref }} -- ${{ inputs.backend-dir }}/ .github/workflows/ || echo "")
+        else
+          CHANGES=$(git diff --name-only HEAD~1 -- ${{ inputs.backend-dir }}/ .github/workflows/ 2>/dev/null || echo "${{ inputs.backend-dir }}/")
+        fi
+        
+        if [[ -n "$CHANGES" ]]; then
+          echo "has-changes=true" >> $GITHUB_OUTPUT
+        else
+          echo "has-changes=false" >> $GITHUB_OUTPUT
+        fi
