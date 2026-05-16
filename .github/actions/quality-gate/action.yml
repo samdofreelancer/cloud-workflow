@@ -35,7 +35,7 @@ runs:
       with:
         fetch-depth: 0
 
-    - uses: actions/cache@f52c685a2d5760ebc2b7a956fb28519a98a11f1c  # v4
+    - uses: actions/cache@v4
       with:
         path: ~/.m2/repository
         key: ${{ runner.os }}-maven-${{ hashFiles(format('{0}/pom.xml', inputs.backend-dir)) }}

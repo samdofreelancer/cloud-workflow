@@ -27,7 +27,7 @@ runs:
   steps:
     - uses: actions/checkout@v4
 
-    - uses: actions/cache@f52c685a2d5760ebc2b7a956fb28519a98a11f1c  # v4
+    - uses: actions/cache@v4
       with:
         path: ~/.m2/repository
         key: ${{ runner.os }}-maven-${{ hashFiles(format('{0}/pom.xml', inputs.backend-dir)) }}
@@ -53,14 +53,14 @@ runs:
       env:
         SPRING_DATASOURCE_PASSWORD: ${{ inputs.oracle-password }}
 
-    - uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5d  # v4
+    - uses: actions/upload-artifact@v4
       if: always()
       with:
         name: coverage-integration-${{ inputs.sha-short }}
         path: ${{ inputs.backend-dir }}/target/site/jacoco/
         retention-days: 5
 
-    - uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5d  # v4
+    - uses: actions/upload-artifact@v4
       if: always()
       with:
         name: tests-integration-${{ inputs.sha-short }}
