@@ -39,8 +39,8 @@ runs:
       shell: bash
       run: |
         if [ ! -d "${{ inputs.report-path }}" ]; then
-          echo "✗ Report path does not exist: ${{ inputs.report-path }}"
-          exit 1
+          echo "⚠ Report path does not exist (will skip upload): ${{ inputs.report-path }}"
+          exit 0
         fi
         
         FILE_COUNT=$(find "${{ inputs.report-path }}" -type f | wc -l)

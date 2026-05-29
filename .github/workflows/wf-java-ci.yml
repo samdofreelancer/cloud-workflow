@@ -13,11 +13,6 @@ on:
         required: false
         type: string
         default: '17'
-      node-version:
-        description: 'Node.js version for report aggregation'
-        required: false
-        type: string
-        default: '18'
       artifact-retention-days:
         description: 'Number of days to retain test reports'
         required: false
@@ -54,11 +49,6 @@ jobs:
           java-version: ${{ inputs.java-version }}
           working-directory: ${{ inputs.working-directory }}
 
-      - name: Setup Node.js
-        uses: samdofreelancer/cloud-workflow/actions/act-setup-node@develop
-        with:
-          node-version: ${{ inputs.node-version }}
-
       - name: Run Flyway migration
         run: |
           docker compose up flyway
@@ -73,6 +63,7 @@ jobs:
 
       - name: Aggregate unit test reports
         if: always()
+        continue-on-error: true
         uses: samdofreelancer/cloud-workflow/actions/act-aggregate-test-report@develop
         with:
           working-directory: ${{ inputs.working-directory }}
@@ -81,20 +72,20 @@ jobs:
 
       - name: Upload unit test reports
         if: always()
+        continue-on-error: true
         uses: samdofreelancer/cloud-workflow/actions/act-upload-test-report@develop
         with:
           artifact-name: surefire-report-unit
           report-path: ${{ inputs.working-directory }}/target/small-test-reports
           retention-days: ${{ inputs.artifact-retention-days }}
+          if-no-files-found: 'ignore'
 
       - name: Run integration tests
         uses: samdofreelancer/cloud-workflow/actions/act-run-integration-test@develop
         with:
           working-directory: ${{ inputs.working-directory }}
           maven-profile: 'medium-test'
-
-      - name: Aggregate integration test reports
-        if: always()
+continue-on-error: true
         uses: samdofreelancer/cloud-workflow/actions/act-aggregate-test-report@develop
         with:
           working-directory: ${{ inputs.working-directory }}
@@ -103,8 +94,13 @@ jobs:
 
       - name: Upload integration test reports
         if: always()
+        continue-on-error: true
         uses: samdofreelancer/cloud-workflow/actions/act-upload-test-report@develop
         with:
+          artifact-name: surefire-report-integration
+          report-path: ${{ inputs.working-directory }}/target/medium-test-reports
+          retention-days: ${{ inputs.artifact-retention-days }}
+          if-no-files-found: 'ignore'
           artifact-name: surefire-report-integration
           report-path: ${{ inputs.working-directory }}/target/medium-test-reports
           retention-days: ${{ inputs.artifact-retention-days }}

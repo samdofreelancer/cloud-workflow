@@ -37,22 +37,28 @@ runs:
   using: composite
 
   steps:
+    - name: Set up Node.js (for aggregation only)
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
     - name: Install xml2js dependency
       shell: bash
       run: |
-        cd ${{ inputs.working-directory }}/$( dirname "${{ inputs.script-location }}" )
+        cd ${{ inputs.working-directory }}/$(dirname "${{ inputs.script-location }}")
         npm install xml2js
         echo "✓ xml2js installed"
 
     - name: Run aggregation script
       id: aggregate
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
       run: |
-        SCRIPT_PATH="${{ inputs.script-location }}"
-        REPORT_DIR="../${{ inputs.report-input-dir }}"
+        WORKING_DIR="${{ inputs.working-directory }}"
+        SCRIPT_PATH="$WORKING_DIR/${{ inputs.script-location }}"
+        REPORT_DIR="$WORKING_DIR/${{ inputs.report-input-dir }}"
         
         echo "Aggregating reports from: $REPORT_DIR"
+        echo "Script location: $SCRIPT_PATH"
         
         if [ ! -d "$REPORT_DIR" ]; then
           echo "⚠ Report directory not found: $REPORT_DIR"
@@ -60,7 +66,8 @@ runs:
           exit 1
         fi
         
-        node "$SCRIPT_PATH" "$REPORT_DIR"
+        cd "$WORKING_DIR"
+        node "$SCRIPT_PATH" "../${{ inputs.report-input-dir }}"
         
         if [ $? -eq 0 ]; then
           echo "✓ Reports aggregated successfully"
