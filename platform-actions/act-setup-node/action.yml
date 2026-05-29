@@ -1,0 +1,46 @@
+name: Setup Node.js Environment
+description: |
+  Sets up Node.js runtime environment with package manager cache support.
+  Validates installation and prepares for package installation.
+
+inputs:
+  node-version:
+    description: 'Node.js version to install (e.g., "18", "20", "22")'
+    required: true
+    default: '18'
+
+  cache:
+    description: 'Package manager cache (npm, yarn, pnpm)'
+    required: false
+    default: 'npm'
+
+  cache-dependency-path:
+    description: 'Path to dependency file for caching (e.g., package-lock.json)'
+    required: false
+
+outputs:
+  node-version-installed:
+    description: 'Installed Node.js version'
+    value: ${{ steps.setup.outputs.node-version }}
+
+  npm-cache-hit:
+    description: 'Whether npm cache was hit'
+    value: ${{ steps.npm-cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+
+  steps:
+    - name: Set up Node.js
+      id: setup
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: ${{ inputs.cache }}
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}
+
+    - name: Validate Node.js installation
+      shell: bash
+      run: |
+        node --version
+        npm --version

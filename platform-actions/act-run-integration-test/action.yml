@@ -1,0 +1,55 @@
+name: Run Integration Tests
+description: |
+  Executes Maven integration tests with configurable Maven profile.
+  Generates test reports compatible with aggregation.
+  Skips unit tests to focus on integration layer.
+
+inputs:
+  working-directory:
+    description: 'Working directory containing pom.xml'
+    required: true
+    default: 'backend'
+
+  maven-profile:
+    description: 'Maven profile to activate for tests'
+    required: false
+    default: 'medium-test'
+
+  maven-args:
+    description: 'Additional Maven arguments'
+    required: false
+    default: '-DskipUnitTests=true'
+
+outputs:
+  test-exit-code:
+    description: 'Maven verify command exit code'
+    value: ${{ steps.run-tests.outputs.exit-code }}
+
+  test-report-path:
+    description: 'Path to generated test reports'
+    value: ${{ steps.run-tests.outputs.report-path }}
+
+runs:
+  using: composite
+
+  steps:
+    - name: Run integration tests
+      id: run-tests
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set +e
+        mvn clean verify -P${{ inputs.maven-profile }} ${{ inputs.maven-args }}
+        EXIT_CODE=$?
+        set -e
+        
+        echo "exit-code=${EXIT_CODE}" >> $GITHUB_OUTPUT
+        echo "report-path=target/failsafe-reports" >> $GITHUB_OUTPUT
+        
+        exit $EXIT_CODE
+
+    - name: Log integration test results
+      if: always()
+      shell: bash
+      run: |
+        echo "Integration test execution completed with exit code: ${{ steps.run-tests.outputs.exit-code }}"

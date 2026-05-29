@@ -1,0 +1,63 @@
+name: Upload Test Report
+description: |
+  Uploads test reports as GitHub artifacts with configurable retention.
+  Supports multiple report types and naming conventions.
+
+inputs:
+  artifact-name:
+    description: 'Name for the uploaded artifact'
+    required: true
+
+  report-path:
+    description: 'Path to test report directory'
+    required: true
+
+  retention-days:
+    description: 'Number of days to retain artifact'
+    required: false
+    default: '30'
+
+  if-no-files-found:
+    description: 'Behavior if no files found (warn, error, ignore)'
+    required: false
+    default: 'warn'
+
+outputs:
+  artifact-id:
+    description: 'ID of the uploaded artifact'
+    value: ${{ steps.upload.outputs.artifact-id }}
+
+  artifact-url:
+    description: 'URL to access the uploaded artifact'
+    value: ${{ steps.upload.outputs.artifact-url }}
+
+runs:
+  using: composite
+
+  steps:
+    - name: Validate report path exists
+      shell: bash
+      run: |
+        if [ ! -d "${{ inputs.report-path }}" ]; then
+          echo "✗ Report path does not exist: ${{ inputs.report-path }}"
+          exit 1
+        fi
+        
+        FILE_COUNT=$(find "${{ inputs.report-path }}" -type f | wc -l)
+        echo "Found $FILE_COUNT files in ${{ inputs.report-path }}"
+
+    - name: Upload test report artifact
+      id: upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.report-path }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: ${{ inputs.if-no-files-found }}
+
+    - name: Log artifact upload
+      shell: bash
+      run: |
+        echo "✓ Artifact uploaded: ${{ inputs.artifact-name }}"
+        echo "  Retention: ${{ inputs.retention-days }} days"
+        echo "  Path: ${{ inputs.report-path }}"

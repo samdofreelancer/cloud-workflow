@@ -1,0 +1,84 @@
+name: Aggregate Test Reports
+description: |
+  Aggregates Maven Surefire/Failsafe test reports into a consolidated report.
+  Uses Node.js script for XML parsing and aggregation.
+  Supports multiple report formats and output directories.
+
+inputs:
+  working-directory:
+    description: 'Working directory containing backend code'
+    required: true
+    default: 'backend'
+
+  report-input-dir:
+    description: 'Path to Maven test reports directory'
+    required: true
+
+  node-version:
+    description: 'Node.js version for script execution'
+    required: false
+    default: '18'
+
+  script-location:
+    description: 'Path to aggregation script relative to working directory'
+    required: false
+    default: 'scripts/aggregate-test-report.js'
+
+outputs:
+  aggregation-success:
+    description: 'Whether aggregation completed successfully'
+    value: ${{ steps.aggregate.outputs.success }}
+
+  report-output-path:
+    description: 'Path to aggregated report'
+    value: ${{ inputs.report-input-dir }}
+
+runs:
+  using: composite
+
+  steps:
+    - name: Install xml2js dependency
+      shell: bash
+      run: |
+        cd ${{ inputs.working-directory }}/$( dirname "${{ inputs.script-location }}" )
+        npm install xml2js
+        echo "✓ xml2js installed"
+
+    - name: Run aggregation script
+      id: aggregate
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        SCRIPT_PATH="${{ inputs.script-location }}"
+        REPORT_DIR="../${{ inputs.report-input-dir }}"
+        
+        echo "Aggregating reports from: $REPORT_DIR"
+        
+        if [ ! -d "$REPORT_DIR" ]; then
+          echo "⚠ Report directory not found: $REPORT_DIR"
+          echo "success=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+        
+        node "$SCRIPT_PATH" "$REPORT_DIR"
+        
+        if [ $? -eq 0 ]; then
+          echo "✓ Reports aggregated successfully"
+          echo "success=true" >> $GITHUB_OUTPUT
+        else
+          echo "✗ Report aggregation failed"
+          echo "success=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+    - name: Validate aggregated report
+      if: steps.aggregate.outputs.success == 'true'
+      shell: bash
+      run: |
+        REPORT_FILE="${{ inputs.report-input-dir }}/aggregated-report.xml"
+        if [ -f "$REPORT_FILE" ]; then
+          echo "✓ Aggregated report generated: $REPORT_FILE"
+          echo "File size: $(du -h "$REPORT_FILE" | cut -f1)"
+        else
+          echo "⚠ Expected aggregated report not found"
+        fi
