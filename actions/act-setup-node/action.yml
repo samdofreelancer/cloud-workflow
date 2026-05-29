@@ -9,23 +9,10 @@ inputs:
     required: true
     default: '18'
 
-  cache:
-    description: 'Package manager cache (npm, yarn, pnpm)'
-    required: false
-    default: 'npm'
-
-  cache-dependency-path:
-    description: 'Path to dependency file for caching (e.g., package-lock.json)'
-    required: false
-
 outputs:
   node-version-installed:
     description: 'Installed Node.js version'
     value: ${{ steps.setup.outputs.node-version }}
-
-  npm-cache-hit:
-    description: 'Whether npm cache was hit'
-    value: ${{ steps.npm-cache.outputs.cache-hit }}
 
 runs:
   using: composite
@@ -36,8 +23,6 @@ runs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
-        cache: ${{ inputs.cache-dependency-path != '' && inputs.cache || 'false' }}
-        cache-dependency-path: ${{ inputs.cache-dependency-path }}
 
     - name: Validate Node.js installation
       shell: bash
