@@ -1,0 +1,65 @@
+name: Run Sonar Scan (Maven)
+description: |
+  Runs a SonarCloud/SonarQube Maven scan with configurable project identifiers.
+
+inputs:
+  working-directory:
+    description: 'Working directory containing backend code'
+    required: true
+
+  sonar-token:
+    description: 'Sonar authentication token'
+    required: true
+
+  sonar-project-key:
+    description: 'Sonar project key'
+    required: true
+
+  sonar-organization:
+    description: 'Sonar organization (SonarCloud). Can be empty for SonarQube.'
+    required: false
+    default: ''
+
+  sonar-host-url:
+    description: 'Sonar host URL'
+    required: false
+    default: 'https://sonarcloud.io'
+
+  qualitygate-wait:
+    description: 'Whether to wait for quality gate result'
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Run Sonar scan
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if [ -z "${{ inputs.sonar-token }}" ]; then
+          echo "⚠ SONAR token empty; skipping scan"
+          exit 0
+        fi
+
+        cd "${{ inputs.working-directory }}"
+
+        BRANCH_NAME=$(echo "${GITHUB_REF#refs/heads/}")
+        echo "Scanning branch: $BRANCH_NAME"
+
+        SONAR_ARGS=(
+          "-Dsonar.projectKey=${{ inputs.sonar-project-key }}"
+          "-Dsonar.host.url=${{ inputs.sonar-host-url }}"
+          "-Dsonar.login=${{ inputs.sonar-token }}"
+          "-Dsonar.qualitygate.wait=${{ inputs.qualitygate-wait }}"
+          "-Dsonar.java.binaries=target/classes"
+          "-Dsonar.branch.name=$BRANCH_NAME"
+        )
+
+        if [ -n "${{ inputs.sonar-organization }}" ]; then
+          SONAR_ARGS+=("-Dsonar.organization=${{ inputs.sonar-organization }}")
+        fi
+
+        mvn sonar:sonar "${SONAR_ARGS[@]}"
+

@@ -159,15 +159,10 @@ jobs:
           oracle-password: ${{ secrets.oracle-password }}
           oracle-port: '1522'
 
-      - name: Verify Docker services
-        run: |
           echo "=== Docker containers ==="
           docker ps
-          echo "=== Network connectivity test ==="
-          timeout 5 bash -c "</dev/tcp/localhost/1522" && echo "✓ Port 1522 is open" || echo "✗ Port 1522 is NOT open"
-          echo "=== Datasource URL test ==="
-          echo "SPRING_DATASOURCE_URL from config: jdbc:oracle:thin:@localhost:1522/XEPDB1"
-          echo "ORACLE_PASSWORD is set: ${#ORACLE_PASSWORD} characters"
+      # DB connectivity verification and readiness checks are encapsulated in act-setup-database
+
 
       - name: Run integration tests
         uses: samdofreelancer/cloud-workflow/actions/act-run-integration-test@develop
@@ -255,51 +250,17 @@ jobs:
         continue-on-error: true
 
       - name: Merge jacoco reports
-        shell: bash
-        run: |
-          cd ${{ inputs.working-directory }}
           
           echo "=== Merging Jacoco reports ==="
           
-          # Create target/site if it doesn't exist
-          mkdir -p target/site
-          
-          # Check what reports exist
-          HAS_UNIT_REPORT=false
-          HAS_INTEGRATION_REPORT=false
-          
           if [ -d target/site/jacoco-unit ] && [ "$(ls -A target/site/jacoco-unit)" ]; then
-            echo "✓ Unit test jacoco report found"
-            HAS_UNIT_REPORT=true
-          else
-            echo "✗ Unit test jacoco report not found or empty"
-          fi
-          
-          if [ -d target/site/jacoco-integration ] && [ "$(ls -A target/site/jacoco-integration)" ]; then
-            echo "✓ Integration test jacoco report found"
-            HAS_INTEGRATION_REPORT=true
-          else
-            echo "✗ Integration test jacoco report not found or empty"
-          fi
-          
-          # Use integration report if available, otherwise use unit report
-          if [ "$HAS_INTEGRATION_REPORT" = true ]; then
-            echo "Using integration test jacoco report"
-            cp -r target/site/jacoco-integration target/site/jacoco
-          elif [ "$HAS_UNIT_REPORT" = true ]; then
-            echo "Using unit test jacoco report"
-            cp -r target/site/jacoco-unit target/site/jacoco
-          else
-            echo "⚠ No jacoco reports found - coverage analysis will be skipped"
-            # Create empty directory so subsequent steps don't fail
-            mkdir -p target/site/jacoco
-          fi
-          
-          # Verify final jacoco directory
-          if [ -d target/site/jacoco ]; then
-            echo "Final jacoco report:"
-            ls -la target/site/jacoco | head -10
-          fi
+        uses: samdofreelancer/cloud-workflow/actions/act-merge-jacoco-reports@develop
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          unit-jacoco-path: 'target/site/jacoco-unit'
+          integration-jacoco-path: 'target/site/jacoco-integration'
+          output-jacoco-path: 'target/site/jacoco'
+
 
       - name: Download compiled target folder
         uses: actions/download-artifact@v4
@@ -307,30 +268,14 @@ jobs:
           name: compiled-target
           path: ${{ inputs.working-directory }}/target
 
-      - name: Debug SonarQube configuration
-        run: |
-          echo "SONAR_TOKEN length: ${#SONAR_TOKEN}"
-          echo "Working directory: ${{ inputs.working-directory }}"
-          echo "Project key: springboot-ddd-category"
-          echo "Organization: samdofreelancer"
-          echo "Host URL: https://sonarcloud.io"
-          if [ -z "$SONAR_TOKEN" ]; then
-            echo "⚠ WARNING: SONAR_TOKEN is empty!"
-          else
-            echo "✓ SONAR_TOKEN is set (${#SONAR_TOKEN} chars)"
-          fi
-
-      - name: Run SonarQube scan
+      - name: Run Sonar scan (platform-owned)
         if: env.SONAR_TOKEN != ''
-        run: |
-          cd ${{ inputs.working-directory }}
-          BRANCH_NAME=$(echo "${GITHUB_REF#refs/heads/}")
-          echo "Scanning branch: $BRANCH_NAME"
-          mvn sonar:sonar \
-            -Dsonar.projectKey=springboot-ddd-category \
-            -Dsonar.organization=samdofreelancer \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.login=$SONAR_TOKEN \
-            -Dsonar.qualitygate.wait=true \
-            -Dsonar.java.binaries=target/classes \
-            -Dsonar.branch.name=$BRANCH_NAME
+        uses: samdofreelancer/cloud-workflow/actions/act-run-sonar-scan@develop
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          sonar-token: ${{ secrets.sonar-token }}
+          sonar-project-key: springboot-ddd-category
+          sonar-organization: samdofreelancer
+          sonar-host-url: https://sonarcloud.io
+          qualitygate-wait: 'true'
+
