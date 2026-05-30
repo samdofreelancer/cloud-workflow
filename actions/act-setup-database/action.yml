@@ -19,6 +19,23 @@ runs:
         oracle-password: ${{ inputs.oracle-password }}
         oracle-port: ${{ inputs.oracle-port }}
 
+    - name: Wait for Oracle to be ready
+      shell: bash
+      run: |
+        echo "Waiting for Oracle to be ready..."
+        for i in {1..60}; do
+          if docker ps | grep -q oracle; then
+            echo "Oracle container is running"
+            sleep 5
+            echo "Oracle is ready"
+            exit 0
+          fi
+          echo "Attempt $i/60: Oracle not ready, waiting..."
+          sleep 2
+        done
+        echo "Oracle container failed to start after 120 seconds"
+        exit 1
+
     - name: Run Flyway migration
       shell: bash
       run: docker compose up flyway
