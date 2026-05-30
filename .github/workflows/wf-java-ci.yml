@@ -188,6 +188,12 @@ jobs:
           integration-jacoco-path: 'target/site/jacoco-integration'
           output-jacoco-path: 'target/site/jacoco'
 
+      - name: Compile for analysis
+        shell: bash
+        run: |
+          cd ${{ inputs.working-directory }}
+          mvn clean compile -DskipTests
+
       - name: Run Sonar scan
         if: env.SONAR_TOKEN != ''
         uses: samdofreelancer/cloud-workflow/actions/act-run-sonar-scan@develop
