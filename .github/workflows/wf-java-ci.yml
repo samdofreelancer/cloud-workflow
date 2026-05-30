@@ -24,15 +24,9 @@ on:
         required: true
 
 jobs:
-  ci:
-    name: Unit & Integration Tests
+  setup:
+    name: Setup environment
     runs-on: ubuntu-latest
-    
-    env:
-      SPRING_PROFILES_ACTIVE: ci
-      SPRING_DATASOURCE_URL: jdbc:oracle:thin:@localhost:1522/XEPDB1
-      VITE_BACKEND_HOST: backend
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -54,6 +48,73 @@ jobs:
           docker compose up flyway
         env:
           ORACLE_PASSWORD: ${{ secrets.oracle-password }}
+
+  compile:
+    name: Compile source
+    runs-on: ubuntu-latest
+    needs: setup
+    env:
+      SPRING_PROFILES_ACTIVE: ci
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@develop
+        with:
+          java-version: ${{ inputs.java-version }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Compile source
+        run: |
+          cd ${{ inputs.working-directory }}
+          mvn clean compile -DskipTests
+
+      - name: Upload compiled target folder
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-target
+          path: ${{ inputs.working-directory }}/target
+          retention-days: 1
+          if-no-files-found: 'ignore'
+
+      - name: Upload m2 repository cache
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-repository
+          path: ~/.m2/repository
+          retention-days: 1
+          if-no-files-found: 'ignore'
+
+  unit-test:
+    name: Run unit tests
+    runs-on: ubuntu-latest
+    needs: compile
+    env:
+      SPRING_PROFILES_ACTIVE: ci
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@develop
+        with:
+          java-version: ${{ inputs.java-version }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Download compiled target folder
+        uses: actions/download-artifact@v4
+        with:
+          name: compiled-target
+          path: ${{ inputs.working-directory }}/target
+
+      - name: Download m2 repository cache
+        uses: actions/download-artifact@v4
+        with:
+          name: m2-repository
+          path: ~/.m2/repository
 
       - name: Run unit tests
         uses: samdofreelancer/cloud-workflow/actions/act-run-unit-test@develop
@@ -80,6 +141,58 @@ jobs:
           retention-days: ${{ inputs.artifact-retention-days }}
           if-no-files-found: 'ignore'
 
+      - name: Upload jacoco unit test report
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report-unit
+          path: ${{ inputs.working-directory }}/target/site/jacoco
+          retention-days: ${{ inputs.artifact-retention-days }}
+          if-no-files-found: 'ignore'
+
+  integration-test:
+    name: Run integration tests
+    runs-on: ubuntu-latest
+    needs: compile
+    env:
+      SPRING_PROFILES_ACTIVE: ci
+      SPRING_DATASOURCE_URL: jdbc:oracle:thin:@localhost:1522/XEPDB1
+      VITE_BACKEND_HOST: backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Oracle
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-oracle@develop
+        with:
+          oracle-password: ${{ secrets.oracle-password }}
+          oracle-port: '1522'
+
+      - name: Setup Java
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@develop
+        with:
+          java-version: ${{ inputs.java-version }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Download compiled target folder
+        uses: actions/download-artifact@v4
+        with:
+          name: compiled-target
+          path: ${{ inputs.working-directory }}/target
+
+      - name: Download m2 repository cache
+        uses: actions/download-artifact@v4
+        with:
+          name: m2-repository
+          path: ~/.m2/repository
+
+      - name: Run Flyway migration
+        run: |
+          docker compose up flyway
+        env:
+          ORACLE_PASSWORD: ${{ secrets.oracle-password }}
+
       - name: Run integration tests
         uses: samdofreelancer/cloud-workflow/actions/act-run-integration-test@develop
         with:
@@ -105,8 +218,53 @@ jobs:
           retention-days: ${{ inputs.artifact-retention-days }}
           if-no-files-found: 'ignore'
 
+      - name: Upload jacoco integration test report
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report-integration
+          path: ${{ inputs.working-directory }}/target/site/jacoco
+          retention-days: ${{ inputs.artifact-retention-days }}
+          if-no-files-found: 'ignore'
+
       - name: Cleanup services
         if: always()
         run: docker compose down
         env:
           ORACLE_PASSWORD: ${{ secrets.oracle-password }}
+
+  analysis:
+    name: Code analysis & quality gates
+    runs-on: ubuntu-latest
+    needs: [unit-test, integration-test]
+    env:
+      SPRING_PROFILES_ACTIVE: ci
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@develop
+        with:
+          java-version: ${{ inputs.java-version }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Download jacoco reports
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ inputs.working-directory }}/target/site/
+
+      - name: Aggregate jacoco report
+        continue-on-error: true
+        run: |
+          cd ${{ inputs.working-directory }}
+          mvn jacoco:report-aggregate
+
+      - name: Run SonarQube scan
+        continue-on-error: true
+        run: |
+          cd ${{ inputs.working-directory }}
+          mvn clean verify sonar:sonar \
+            -Dsonar.projectKey=money-keeper \
+            -Dsonar.qualitygate.wait=true
