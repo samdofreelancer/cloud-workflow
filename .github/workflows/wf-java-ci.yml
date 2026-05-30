@@ -293,17 +293,11 @@ jobs:
             ls -la target/site/jacoco | head -10
           fi
 
-      - name: Debug SonarQube configuration
-        run: |
-          echo "SONAR_TOKEN length: ${#SONAR_TOKEN}"
-          echo "Working directory: ${{ inputs.working-directory }}"
-          echo "Project key: springboot-ddd-category"
-          echo "Organization: samdofreelancer"
-          if [ -z "$SONAR_TOKEN" ]; then
-            echo "⚠ WARNING: SONAR_TOKEN is empty!"
-          else
-            echo "✓ SONAR_TOKEN is set"
-          fi
+      - name: Download compiled target folder
+        uses: actions/download-artifact@v4
+        with:
+          name: compiled-target
+          path: ${{ inputs.working-directory }}/target
 
       - name: Run SonarQube scan
         if: env.SONAR_TOKEN != ''
@@ -314,5 +308,6 @@ jobs:
             -Dsonar.organization=samdofreelancer \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.login=$SONAR_TOKEN \
-            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.java.binaries=target/classes
         continue-on-error: true
