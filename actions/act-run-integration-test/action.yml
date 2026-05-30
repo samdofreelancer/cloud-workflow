@@ -39,7 +39,7 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: |
         set +e
-        mvn clean verify -P${{ inputs.maven-profile }} ${{ inputs.maven-args }}
+        mvn verify -P${{ inputs.maven-profile }} ${{ inputs.maven-args }}
         EXIT_CODE=$?
         set -e
         

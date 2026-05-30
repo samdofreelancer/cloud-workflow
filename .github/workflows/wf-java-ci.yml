@@ -310,4 +310,3 @@ jobs:
             -Dsonar.login=$SONAR_TOKEN \
             -Dsonar.qualitygate.wait=true \
             -Dsonar.java.binaries=target/classes
-        continue-on-error: true
