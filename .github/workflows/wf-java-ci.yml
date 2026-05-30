@@ -13,6 +13,14 @@ on:
         required: false
         type: string
         default: '17'
+      sonar-project-key:
+        description: 'SonarQube project key (must be provided by product repository)'
+        required: true
+        type: string
+      sonar-organization:
+        description: 'SonarCloud organization (optional, only for SonarCloud)'
+        required: false
+        type: string
       artifact-retention-days:
         description: 'Number of days to retain test reports'
         required: false
@@ -27,42 +35,11 @@ on:
         required: false
 
 jobs:
-  compile:
-    name: Compile source
-    runs-on: ubuntu-latest
-    env:
-      SPRING_PROFILES_ACTIVE: ci
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ inputs.java-version }}
-          distribution: 'temurin'
-          cache: 'maven'
-
-      - name: Compile source
-        run: |
-          cd ${{ inputs.working-directory }}
-          mvn clean compile -DskipTests
-
-      - name: Upload compiled target folder
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: compiled-target
-          path: ${{ inputs.working-directory }}/target
-          retention-days: 1
-          if-no-files-found: 'ignore'
-
   unit-test:
     name: Run unit tests
     runs-on: ubuntu-latest
-    needs: compile
+    permissions:
+      contents: read
     env:
       SPRING_PROFILES_ACTIVE: ci
     steps:
@@ -72,39 +49,18 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@develop
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
-          cache: 'maven'
-
-      - name: Download compiled target folder
-        uses: actions/download-artifact@v4
-        with:
-          name: compiled-target
-          path: ${{ inputs.working-directory }}/target
+          cache-enabled: 'true'
+          working-directory: ${{ inputs.working-directory }}
 
       - name: Run unit tests
         uses: samdofreelancer/cloud-workflow/actions/act-run-unit-test@develop
         with:
           working-directory: ${{ inputs.working-directory }}
           maven-profile: 'small-test'
-
-      - name: Check what unit test artifacts were generated
-        if: always()
-        shell: bash
-        run: |
-          set +e
-          echo "=== Jacoco report location for unit tests ==="
-          if [ -d "${{ inputs.working-directory }}/target/site/jacoco" ]; then
-            echo "✓ jacoco directory exists"
-            echo "Number of files:"
-            find ${{ inputs.working-directory }}/target/site/jacoco -type f 2>/dev/null | wc -l
-            echo "Sample files:"
-            ls ${{ inputs.working-directory }}/target/site/jacoco/ | head -5
-          else
-            echo "✗ jacoco directory NOT found"
-          fi
 
       - name: Upload unit test reports
         if: always()
@@ -129,7 +85,8 @@ jobs:
   integration-test:
     name: Run integration tests
     runs-on: ubuntu-latest
-    needs: compile
+    permissions:
+      contents: read
     env:
       SPRING_PROFILES_ACTIVE: ci
       SPRING_DATASOURCE_PASSWORD: ${{ secrets.oracle-password }}
@@ -141,26 +98,18 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@develop
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
-          cache: 'maven'
-
-      - name: Download compiled target folder
-        uses: actions/download-artifact@v4
-        with:
-          name: compiled-target
-          path: ${{ inputs.working-directory }}/target
+          cache-enabled: 'true'
+          working-directory: ${{ inputs.working-directory }}
 
       - name: Setup Database (Oracle + Flyway)
         uses: samdofreelancer/cloud-workflow/actions/act-setup-database@develop
         with:
           oracle-password: ${{ secrets.oracle-password }}
           oracle-port: '1522'
-
-      # DB connectivity verification and readiness checks are encapsulated in act-setup-database
-
 
       - name: Run integration tests
         uses: samdofreelancer/cloud-workflow/actions/act-run-integration-test@develop
@@ -169,23 +118,6 @@ jobs:
           maven-profile: 'medium-test'
         env:
           ORACLE_PASSWORD: ${{ secrets.oracle-password }}
-
-      - name: Check what test artifacts were generated
-        if: always()
-        shell: bash
-        run: |
-          set +e
-          echo "=== Directory structure in target ==="
-          ls -d ${{ inputs.working-directory }}/target/*/
-          echo ""
-          echo "=== Jacoco report location ==="
-          if [ -d "${{ inputs.working-directory }}/target/site/jacoco" ]; then
-            echo "✓ jacoco directory exists"
-            echo "Number of files:"
-            find ${{ inputs.working-directory }}/target/site/jacoco -type f 2>/dev/null | wc -l
-          else
-            echo "✗ jacoco directory NOT found"
-          fi
 
       - name: Upload integration test reports
         if: always()
@@ -207,16 +139,16 @@ jobs:
           retention-days: ${{ inputs.artifact-retention-days }}
           if-no-files-found: 'ignore'
 
-      - name: Cleanup services
+      - name: Teardown Database
         if: always()
-        run: docker compose down
-        env:
-          ORACLE_PASSWORD: ${{ secrets.oracle-password }}
+        uses: samdofreelancer/cloud-workflow/actions/act-teardown-database@develop
 
   analysis:
     name: Code analysis & quality gates
     runs-on: ubuntu-latest
     needs: [unit-test, integration-test]
+    permissions:
+      contents: read
     env:
       SPRING_PROFILES_ACTIVE: ci
       SONAR_TOKEN: ${{ secrets.sonar-token }}
@@ -227,11 +159,12 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@develop
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
-          cache: 'maven'
+          cache-enabled: 'true'
+          working-directory: ${{ inputs.working-directory }}
 
       - name: Download unit test jacoco report
         uses: actions/download-artifact@v4
@@ -255,21 +188,19 @@ jobs:
           integration-jacoco-path: 'target/site/jacoco-integration'
           output-jacoco-path: 'target/site/jacoco'
 
+      - name: Compile for analysis
+        shell: bash
+        run: |
+          cd ${{ inputs.working-directory }}
+          mvn clean compile -DskipTests
 
-      - name: Download compiled target folder
-        uses: actions/download-artifact@v4
-        with:
-          name: compiled-target
-          path: ${{ inputs.working-directory }}/target
-
-      - name: Run Sonar scan (platform-owned)
+      - name: Run Sonar scan
         if: env.SONAR_TOKEN != ''
         uses: samdofreelancer/cloud-workflow/actions/act-run-sonar-scan@develop
         with:
           working-directory: ${{ inputs.working-directory }}
           sonar-token: ${{ secrets.sonar-token }}
-          sonar-project-key: springboot-ddd-category
-          sonar-organization: samdofreelancer
-          sonar-host-url: https://sonarcloud.io
+          sonar-project-key: ${{ inputs.sonar-project-key }}
+          sonar-organization: ${{ inputs.sonar-organization }}
           qualitygate-wait: 'true'
 

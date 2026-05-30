@@ -1,0 +1,36 @@
+name: Teardown Database (Docker Compose)
+description: |
+  Tears down Docker Compose services used for database-backed tests.
+
+inputs:
+  compose-file:
+    description: 'Docker compose file path (optional)'
+    required: false
+    default: ''
+
+  services:
+    description: 'Services to stop (optional). If empty, runs docker compose down.'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+
+  steps:
+    - name: Teardown docker compose services
+      shell: bash
+      run: |
+        set +e
+
+        COMPOSE_ARGS=()
+        if [ -n "${{ inputs.compose-file }}" ]; then
+          COMPOSE_ARGS+=("-f" "${{ inputs.compose-file }}")
+        fi
+
+        if [ -n "${{ inputs.services }}" ]; then
+          echo "Stopping docker compose services: ${{ inputs.services }}"
+          docker compose "${COMPOSE_ARGS[@]}" stop ${{ inputs.services }}
+        else
+          echo "Running docker compose down"
+          docker compose "${COMPOSE_ARGS[@]}" down
+        fi
