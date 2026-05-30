@@ -85,7 +85,7 @@ jobs:
           path: ${{ inputs.working-directory }}/target
 
       - name: Run unit tests
-        uses: samdofreelancer/cloud-workflow/actions/act-run-unit-test@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-run-unit-test@2a820941b73f7e44ea49aada3dab572b40657f58
         with:
           working-directory: ${{ inputs.working-directory }}
           maven-profile: 'small-test'
@@ -109,7 +109,7 @@ jobs:
       - name: Upload unit test reports
         if: always()
         continue-on-error: true
-        uses: samdofreelancer/cloud-workflow/actions/act-upload-test-report@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-upload-test-report@2a820941b73f7e44ea49aada3dab572b40657f58
         with:
           artifact-name: surefire-report-unit
           report-path: ${{ inputs.working-directory }}/target/small-test-reports
@@ -154,7 +154,7 @@ jobs:
           path: ${{ inputs.working-directory }}/target
 
       - name: Setup Database (Oracle + Flyway)
-        uses: samdofreelancer/cloud-workflow/actions/act-setup-database@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-database@2a820941b73f7e44ea49aada3dab572b40657f58
         with:
           oracle-password: ${{ secrets.oracle-password }}
           oracle-port: '1522'
@@ -163,7 +163,7 @@ jobs:
 
 
       - name: Run integration tests
-        uses: samdofreelancer/cloud-workflow/actions/act-run-integration-test@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-run-integration-test@2a820941b73f7e44ea49aada3dab572b40657f58
         with:
           working-directory: ${{ inputs.working-directory }}
           maven-profile: 'medium-test'
@@ -190,7 +190,7 @@ jobs:
       - name: Upload integration test reports
         if: always()
         continue-on-error: true
-        uses: samdofreelancer/cloud-workflow/actions/act-upload-test-report@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-upload-test-report@2a820941b73f7e44ea49aada3dab572b40657f58
         with:
           artifact-name: surefire-report-integration
           report-path: ${{ inputs.working-directory }}/target/medium-test-reports
@@ -248,7 +248,7 @@ jobs:
         continue-on-error: true
 
       - name: Merge jacoco reports
-        uses: samdofreelancer/cloud-workflow/actions/act-merge-jacoco-reports@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-merge-jacoco-reports@2a820941b73f7e44ea49aada3dab572b40657f58
         with:
           working-directory: ${{ inputs.working-directory }}
           unit-jacoco-path: 'target/site/jacoco-unit'
@@ -264,7 +264,7 @@ jobs:
 
       - name: Run Sonar scan (platform-owned)
         if: env.SONAR_TOKEN != ''
-        uses: samdofreelancer/cloud-workflow/actions/act-run-sonar-scan@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-run-sonar-scan@2a820941b73f7e44ea49aada3dab572b40657f58
         with:
           working-directory: ${{ inputs.working-directory }}
           sonar-token: ${{ secrets.sonar-token }}
