@@ -86,6 +86,20 @@ jobs:
           working-directory: ${{ inputs.working-directory }}
           maven-profile: 'small-test'
 
+      - name: Check what unit test artifacts were generated
+        if: always()
+        shell: bash
+        run: |
+          echo "=== Jacoco report location for unit tests ==="
+          if [ -d "${{ inputs.working-directory }}/target/site/jacoco" ]; then
+            echo "✓ jacoco directory exists"
+            find ${{ inputs.working-directory }}/target/site/jacoco -type f | head -10
+          else
+            echo "✗ jacoco directory NOT found"
+            echo "Looking for jacoco in alternate locations:"
+            find ${{ inputs.working-directory }}/target -name "jacoco*" -o -name "*coverage*" 2>/dev/null | head -10
+          fi
+
       - name: Upload unit test reports
         if: always()
         continue-on-error: true
@@ -155,6 +169,21 @@ jobs:
         env:
           ORACLE_PASSWORD: ${{ secrets.oracle-password }}
 
+      - name: Check what test artifacts were generated
+        if: always()
+        shell: bash
+        run: |
+          echo "=== Directory structure in target ==="
+          find ${{ inputs.working-directory }}/target -maxdepth 3 -type d | head -20
+          echo ""
+          echo "=== Jacoco report location ==="
+          if [ -d "${{ inputs.working-directory }}/target/site/jacoco" ]; then
+            echo "✓ jacoco directory exists at ${{ inputs.working-directory }}/target/site/jacoco"
+            ls -la ${{ inputs.working-directory }}/target/site/jacoco
+          else
+            echo "✗ jacoco directory NOT found at ${{ inputs.working-directory }}/target/site/jacoco"
+          fi
+
       - name: Upload integration test reports
         if: always()
         continue-on-error: true
@@ -173,6 +202,7 @@ jobs:
           name: jacoco-report-integration
           path: ${{ inputs.working-directory }}/target/site/jacoco
           retention-days: ${{ inputs.artifact-retention-days }}
+          if-no-files-found: 'ignore'
           if-no-files-found: 'ignore'
 
       - name: Cleanup services
@@ -204,6 +234,7 @@ jobs:
         with:
           name: jacoco-report-unit
           path: ${{ inputs.working-directory }}/target/site/jacoco-unit
+        continue-on-error: true
 
       - name: Download integration test jacoco report
         uses: actions/download-artifact@v4
@@ -217,19 +248,46 @@ jobs:
         run: |
           cd ${{ inputs.working-directory }}
           
-          # Create target/site/jacoco if it doesn't exist
-          mkdir -p target/site/jacoco
+          echo "=== Merging Jacoco reports ==="
           
-          # If integration test report exists, use it (as it includes both unit and integration tests)
-          # Otherwise use unit test report
-          if [ -d target/site/jacoco-integration ]; then
-            echo "Using integration test jacoco report (covers all tests)"
-            cp -r target/site/jacoco-integration/* target/site/jacoco/
-          elif [ -d target/site/jacoco-unit ]; then
-            echo "Using unit test jacoco report"
-            cp -r target/site/jacoco-unit/* target/site/jacoco/
+          # Create target/site if it doesn't exist
+          mkdir -p target/site
+          
+          # Check what reports exist
+          HAS_UNIT_REPORT=false
+          HAS_INTEGRATION_REPORT=false
+          
+          if [ -d target/site/jacoco-unit ] && [ "$(ls -A target/site/jacoco-unit)" ]; then
+            echo "✓ Unit test jacoco report found"
+            HAS_UNIT_REPORT=true
           else
-            echo "Warning: No jacoco reports found"
+            echo "✗ Unit test jacoco report not found or empty"
+          fi
+          
+          if [ -d target/site/jacoco-integration ] && [ "$(ls -A target/site/jacoco-integration)" ]; then
+            echo "✓ Integration test jacoco report found"
+            HAS_INTEGRATION_REPORT=true
+          else
+            echo "✗ Integration test jacoco report not found or empty"
+          fi
+          
+          # Use integration report if available, otherwise use unit report
+          if [ "$HAS_INTEGRATION_REPORT" = true ]; then
+            echo "Using integration test jacoco report"
+            cp -r target/site/jacoco-integration target/site/jacoco
+          elif [ "$HAS_UNIT_REPORT" = true ]; then
+            echo "Using unit test jacoco report"
+            cp -r target/site/jacoco-unit target/site/jacoco
+          else
+            echo "⚠ No jacoco reports found - coverage analysis will be skipped"
+            # Create empty directory so subsequent steps don't fail
+            mkdir -p target/site/jacoco
+          fi
+          
+          # Verify final jacoco directory
+          if [ -d target/site/jacoco ]; then
+            echo "Final jacoco report:"
+            ls -la target/site/jacoco | head -10
           fi
 
       - name: Run SonarQube scan
