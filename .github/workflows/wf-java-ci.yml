@@ -96,15 +96,6 @@ jobs:
           working-directory: ${{ inputs.working-directory }}
           maven-profile: 'small-test'
 
-      - name: Aggregate unit test reports
-        if: always()
-        continue-on-error: true
-        uses: samdofreelancer/cloud-workflow/actions/act-aggregate-test-report@develop
-        with:
-          working-directory: ${{ inputs.working-directory }}
-          report-input-dir: target/small-test-reports
-          script-location: scripts/aggregate-test-report.js
-
       - name: Upload unit test reports
         if: always()
         continue-on-error: true
@@ -166,15 +157,6 @@ jobs:
         with:
           working-directory: ${{ inputs.working-directory }}
           maven-profile: 'medium-test'
-
-      - name: Aggregate integration test reports
-        if: always()
-        continue-on-error: true
-        uses: samdofreelancer/cloud-workflow/actions/act-aggregate-test-report@develop
-        with:
-          working-directory: ${{ inputs.working-directory }}
-          report-input-dir: target/medium-test-reports
-          script-location: scripts/aggregate-test-report.js
 
       - name: Upload integration test reports
         if: always()
