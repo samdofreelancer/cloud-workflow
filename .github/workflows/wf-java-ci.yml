@@ -203,7 +203,6 @@ jobs:
           path: ${{ inputs.working-directory }}/target/site/jacoco
           retention-days: ${{ inputs.artifact-retention-days }}
           if-no-files-found: 'ignore'
-          if-no-files-found: 'ignore'
 
       - name: Cleanup services
         if: always()
