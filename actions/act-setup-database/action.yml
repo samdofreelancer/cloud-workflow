@@ -19,25 +19,38 @@ runs:
         oracle-password: ${{ inputs.oracle-password }}
         oracle-port: ${{ inputs.oracle-port }}
 
+    - name: Start Docker Compose services in background
+      shell: bash
+      run: |
+        echo "Starting Docker Compose services..."
+        docker compose up -d
+      env:
+        ORACLE_PASSWORD: ${{ inputs.oracle-password }}
+
     - name: Wait for Oracle to be ready
       shell: bash
       run: |
-        echo "Waiting for Oracle to be ready..."
+        echo "Waiting for Oracle to accept connections..."
         for i in {1..60}; do
-          if docker ps | grep -q oracle; then
-            echo "Oracle container is running"
-            sleep 5
+          if timeout 2 bash -c "</dev/tcp/localhost/1522" 2>/dev/null; then
+            echo "Oracle port 1522 is open"
+            sleep 3
             echo "Oracle is ready"
             exit 0
           fi
-          echo "Attempt $i/60: Oracle not ready, waiting..."
+          echo "Attempt $i/60: Oracle not responding on port 1522..."
           sleep 2
         done
-        echo "Oracle container failed to start after 120 seconds"
+        echo "Oracle failed to start after 120 seconds"
+        docker compose logs oracle
         exit 1
+      env:
+        ORACLE_PASSWORD: ${{ inputs.oracle-password }}
 
     - name: Run Flyway migration
       shell: bash
-      run: docker compose up flyway
+      run: |
+        echo "Running Flyway migration..."
+        docker compose run --rm flyway
       env:
         ORACLE_PASSWORD: ${{ inputs.oracle-password }}
