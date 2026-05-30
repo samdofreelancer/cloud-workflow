@@ -159,8 +159,6 @@ jobs:
           oracle-password: ${{ secrets.oracle-password }}
           oracle-port: '1522'
 
-          echo "=== Docker containers ==="
-          docker ps
       # DB connectivity verification and readiness checks are encapsulated in act-setup-database
 
 
@@ -250,10 +248,6 @@ jobs:
         continue-on-error: true
 
       - name: Merge jacoco reports
-          
-          echo "=== Merging Jacoco reports ==="
-          
-          if [ -d target/site/jacoco-unit ] && [ "$(ls -A target/site/jacoco-unit)" ]; then
         uses: samdofreelancer/cloud-workflow/actions/act-merge-jacoco-reports@develop
         with:
           working-directory: ${{ inputs.working-directory }}
