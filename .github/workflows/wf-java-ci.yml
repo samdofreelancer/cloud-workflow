@@ -85,7 +85,10 @@ jobs:
         with:
           working-directory: ${{ inputs.working-directory }}
           maven-profile: 'medium-test'
-continue-on-error: true
+
+      - name: Aggregate integration test reports
+        if: always()
+        continue-on-error: true
         uses: samdofreelancer/cloud-workflow/actions/act-aggregate-test-report@develop
         with:
           working-directory: ${{ inputs.working-directory }}
@@ -101,9 +104,6 @@ continue-on-error: true
           report-path: ${{ inputs.working-directory }}/target/medium-test-reports
           retention-days: ${{ inputs.artifact-retention-days }}
           if-no-files-found: 'ignore'
-          artifact-name: surefire-report-integration
-          report-path: ${{ inputs.working-directory }}/target/medium-test-reports
-          retention-days: ${{ inputs.artifact-retention-days }}
 
       - name: Cleanup services
         if: always()
