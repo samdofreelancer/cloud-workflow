@@ -1,0 +1,71 @@
+name: Setup Java Environment
+description: |
+  Sets up Java Development Kit (JDK) with Maven caching support.
+  Includes version validation and cache key generation based on pom.xml.
+
+inputs:
+  java-version:
+    description: 'Java version to install (e.g., "17", "21")'
+    required: true
+    default: '17'
+
+  distribution:
+    description: 'Java distribution (temurin, zulu, corretto, etc.)'
+    required: false
+    default: 'temurin'
+
+  working-directory:
+    description: 'Working directory for cache key generation'
+    required: false
+    default: 'backend'
+
+  cache-enabled:
+    description: 'Enable Maven package caching'
+    required: false
+    default: 'true'
+
+outputs:
+  java-version-installed:
+    description: 'Installed Java version'
+    value: ${{ steps.setup.outputs.version }}
+
+  maven-cache-hit:
+    description: 'Whether Maven cache was hit'
+    value: ${{ steps.maven-cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+
+  steps:
+    - name: Set up JDK
+      id: setup
+      uses: actions/setup-java@v4
+      with:
+        distribution: ${{ inputs.distribution }}
+        java-version: ${{ inputs.java-version }}
+        cache: ${{ inputs.cache-enabled == 'true' && 'maven' || '' }}
+
+    - name: Validate Java installation
+      shell: bash
+      run: |
+        java -version
+        mvn -version
+
+    - name: Manual Maven cache (fallback)
+      id: maven-cache
+      if: inputs.cache-enabled == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles(format('{0}/pom.xml', inputs.working-directory)) }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+
+    - name: Log cache status
+      shell: bash
+      run: |
+        if [ "${{ steps.maven-cache.outputs.cache-hit }}" == "true" ]; then
+          echo "✓ Maven cache hit"
+        else
+          echo "⊘ Maven cache miss - downloading dependencies"
+        fi

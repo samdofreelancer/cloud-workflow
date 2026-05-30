@@ -1,0 +1,31 @@
+name: Setup Node.js Environment
+description: |
+  Sets up Node.js runtime environment with package manager cache support.
+  Validates installation and prepares for package installation.
+
+inputs:
+  node-version:
+    description: 'Node.js version to install (e.g., "18", "20", "22")'
+    required: true
+    default: '18'
+
+outputs:
+  node-version-installed:
+    description: 'Installed Node.js version'
+    value: ${{ steps.setup.outputs.node-version }}
+
+runs:
+  using: composite
+
+  steps:
+    - name: Set up Node.js
+      id: setup
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Validate Node.js installation
+      shell: bash
+      run: |
+        node --version
+        npm --version

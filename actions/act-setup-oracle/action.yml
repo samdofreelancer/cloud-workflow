@@ -1,0 +1,78 @@
+name: Setup Oracle Container
+description: |
+  Starts Oracle Database container using docker-compose.
+  Configures environment for database connectivity.
+  Waits for service readiness.
+
+inputs:
+  oracle-password:
+    description: 'Oracle database password'
+    required: true
+
+  oracle-port:
+    description: 'Host port for Oracle container (container port: 1521)'
+    required: false
+    default: '1522'
+
+  docker-compose-file:
+    description: 'Path to docker-compose.yml'
+    required: false
+    default: 'docker-compose.yml'
+
+  wait-timeout:
+    description: 'Timeout in seconds for service readiness'
+    required: false
+    default: '300'
+
+outputs:
+  oracle-ready:
+    description: 'Whether Oracle is ready for connections'
+    value: ${{ steps.verify.outputs.ready }}
+
+  oracle-connection-string:
+    description: 'JDBC connection string for Oracle'
+    value: 'jdbc:oracle:thin:@localhost:${{ inputs.oracle-port }}/XEPDB1'
+
+runs:
+  using: composite
+
+  steps:
+    - name: Start Oracle container
+      id: start
+      shell: bash
+      env:
+        ORACLE_PASSWORD: ${{ inputs.oracle-password }}
+      run: |
+        echo "Starting Oracle container on port ${{ inputs.oracle-port }}..."
+        docker compose -f ${{ inputs.docker-compose-file }} up -d oracle
+        echo "started=true" >> $GITHUB_OUTPUT
+
+    - name: Wait for Oracle readiness
+      id: verify
+      shell: bash
+      env:
+        ORACLE_PASSWORD: ${{ inputs.oracle-password }}
+      run: |
+        TIMEOUT=${{ inputs.wait-timeout }}
+        ELAPSED=0
+        INTERVAL=5
+        
+        while [ $ELAPSED -lt $TIMEOUT ]; do
+          if docker compose -f ${{ inputs.docker-compose-file }} exec -T oracle sqlplus -v > /dev/null 2>&1; then
+            echo "✓ Oracle is ready"
+            echo "ready=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "Waiting for Oracle... ($ELAPSED/$TIMEOUT seconds)"
+          sleep $INTERVAL
+          ELAPSED=$((ELAPSED + INTERVAL))
+        done
+        
+        echo "✗ Oracle failed to start within timeout"
+        echo "ready=false" >> $GITHUB_OUTPUT
+        exit 1
+
+    - name: Log Oracle status
+      shell: bash
+      run: |
+        docker compose -f ${{ inputs.docker-compose-file }} ps oracle

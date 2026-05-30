@@ -1,0 +1,80 @@
+name: Quality Gate
+description: Run SonarQube analysis and verify quality gates
+author: Money Keeper Team
+
+inputs:
+  backend-dir:
+    description: Backend directory path
+    required: false
+    default: ./backend
+  sha-short:
+    description: Short Git SHA for artifact naming
+    required: true
+  sonar-host-url:
+    description: SonarQube server URL
+    required: false
+  sonar-login:
+    description: SonarQube authentication token
+    required: false
+  unit-test-result:
+    description: Unit test job result
+    required: true
+  integration-test-result:
+    description: Integration test job result
+    required: true
+
+outputs:
+  status:
+    description: Overall quality gate status
+    value: ${{ steps.verify.outputs.status }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles(format('{0}/pom.xml', inputs.backend-dir)) }}
+        restore-keys: ${{ runner.os }}-maven-
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: build-${{ inputs.sha-short }}
+        path: ${{ inputs.backend-dir }}/target/
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: coverage-unit-${{ inputs.sha-short }}
+        path: ${{ inputs.backend-dir }}/target/coverage-unit/
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: coverage-integration-${{ inputs.sha-short }}
+        path: ${{ inputs.backend-dir }}/target/coverage-integration/
+
+    - name: Run SonarQube scan
+      id: scan
+      shell: bash
+      working-directory: ${{ inputs.backend-dir }}
+      continue-on-error: true
+      env:
+        SONAR_HOST_URL: ${{ inputs.sonar-host-url }}
+        SONAR_LOGIN: ${{ inputs.sonar-login }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        python3 "$(dirname "$GITHUB_ACTION_PATH")/../../scripts/sonar_scan.py"
+
+    - name: Verify quality gates
+      id: verify
+      shell: bash
+      env:
+        UNIT_TEST_RESULT: ${{ inputs.unit-test-result }}
+        INTEGRATION_TEST_RESULT: ${{ inputs.integration-test-result }}
+        SONAR_RESULT: ${{ steps.scan.outcome }}
+        SONAR_STATUS: ${{ steps.scan.outputs.status }}
+      run: |
+        python3 "$(dirname "$GITHUB_ACTION_PATH")/../../scripts/verify_quality_gates.py"

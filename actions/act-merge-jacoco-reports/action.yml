@@ -1,0 +1,79 @@
+name: Merge Jacoco Reports
+description: |
+  Merges unit and/or integration Jacoco HTML reports into a single output directory.
+
+inputs:
+  working-directory:
+    description: 'Working directory containing backend code'
+    required: true
+
+  unit-jacoco-path:
+    description: 'Path to unit jacoco directory (relative to working-directory)'
+    required: false
+    default: 'target/site/jacoco-unit'
+
+  integration-jacoco-path:
+    description: 'Path to integration jacoco directory (relative to working-directory)'
+    required: false
+    default: 'target/site/jacoco-integration'
+
+  output-jacoco-path:
+    description: 'Path to merged jacoco output directory (relative to working-directory)'
+    required: false
+    default: 'target/site/jacoco'
+
+runs:
+  using: composite
+  steps:
+    - name: Merge Jacoco reports
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        WD="${{ inputs.working-directory }}"
+        UNIT_PATH="$WD/${{ inputs.unit-jacoco-path }}"
+        INTEG_PATH="$WD/${{ inputs.integration-jacoco-path }}"
+        OUT_PATH="$WD/${{ inputs.output-jacoco-path }}"
+
+        echo "=== Jacoco merge ==="
+        echo "Unit: $UNIT_PATH"
+        echo "Integration: $INTEG_PATH"
+        echo "Output: $OUT_PATH"
+
+        mkdir -p "$(dirname "$OUT_PATH")"
+
+        HAS_UNIT_REPORT=false
+        HAS_INTEGRATION_REPORT=false
+
+        if [ -d "$UNIT_PATH" ] && [ "$(ls -A "$UNIT_PATH" 2>/dev/null || true)" ]; then
+          echo "✓ Unit jacoco report found"
+          HAS_UNIT_REPORT=true
+        else
+          echo "✗ Unit jacoco report not found or empty"
+        fi
+
+        if [ -d "$INTEG_PATH" ] && [ "$(ls -A "$INTEG_PATH" 2>/dev/null || true)" ]; then
+          echo "✓ Integration jacoco report found"
+          HAS_INTEGRATION_REPORT=true
+        else
+          echo "✗ Integration jacoco report not found or empty"
+        fi
+
+        rm -rf "$OUT_PATH"
+        mkdir -p "$OUT_PATH"
+
+        if [ "$HAS_INTEGRATION_REPORT" = true ]; then
+          echo "Using integration jacoco report"
+          cp -r "$INTEG_PATH"/. "$OUT_PATH/"
+        elif [ "$HAS_UNIT_REPORT" = true ]; then
+          echo "Using unit jacoco report"
+          cp -r "$UNIT_PATH"/. "$OUT_PATH/"
+        else
+          echo "⚠ No jacoco reports found - merged report will be empty"
+        fi
+
+        if [ -d "$OUT_PATH" ]; then
+          echo "Final merged jacoco directory:" 
+          ls -la "$OUT_PATH" | head -10 || true
+        fi
+
