@@ -90,14 +90,15 @@ jobs:
         if: always()
         shell: bash
         run: |
+          set +e
           echo "=== Jacoco report location for unit tests ==="
           if [ -d "${{ inputs.working-directory }}/target/site/jacoco" ]; then
             echo "✓ jacoco directory exists"
-            find ${{ inputs.working-directory }}/target/site/jacoco -type f | head -10
+            ls -lR ${{ inputs.working-directory }}/target/site/jacoco | head -20
           else
             echo "✗ jacoco directory NOT found"
             echo "Looking for jacoco in alternate locations:"
-            find ${{ inputs.working-directory }}/target -name "jacoco*" -o -name "*coverage*" 2>/dev/null | head -10
+            find ${{ inputs.working-directory }}/target -name "jacoco*" -o -name "*coverage*" 2>/dev/null || true
           fi
 
       - name: Upload unit test reports
@@ -173,13 +174,14 @@ jobs:
         if: always()
         shell: bash
         run: |
+          set +e
           echo "=== Directory structure in target ==="
-          find ${{ inputs.working-directory }}/target -maxdepth 3 -type d | head -20
+          ls -d ${{ inputs.working-directory }}/target/*/ 2>/dev/null | head -10
           echo ""
           echo "=== Jacoco report location ==="
           if [ -d "${{ inputs.working-directory }}/target/site/jacoco" ]; then
             echo "✓ jacoco directory exists at ${{ inputs.working-directory }}/target/site/jacoco"
-            ls -la ${{ inputs.working-directory }}/target/site/jacoco
+            ls -lR ${{ inputs.working-directory }}/target/site/jacoco | head -20
           else
             echo "✗ jacoco directory NOT found at ${{ inputs.working-directory }}/target/site/jacoco"
           fi
