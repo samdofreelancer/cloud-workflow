@@ -187,6 +187,7 @@ jobs:
     needs: [unit-test, integration-test]
     env:
       SPRING_PROFILES_ACTIVE: ci
+      SONAR_TOKEN: ${{ secrets.sonar-token }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -232,9 +233,7 @@ jobs:
           fi
 
       - name: Run SonarQube scan
-        if: secrets.sonar-token != ''
-        env:
-          SONAR_TOKEN: ${{ secrets.sonar-token }}
+        if: env.SONAR_TOKEN != ''
         run: |
           cd ${{ inputs.working-directory }}
           mvn sonar:sonar \
