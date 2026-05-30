@@ -1,76 +1,165 @@
-name: Setup Database (Oracle + Flyway)
-description: 'Setup Oracle database and run Flyway migrations'
+name: Setup Database (Oracle + Flyway) - Consolidated
+description: |
+  Unified database setup action.
+  - Starts Oracle container using docker-compose
+  - Waits for database readiness
+  - Runs Flyway migrations
+  - Provides connection string output
+  
+  This action consolidates database setup responsibilities.
+  Single source of truth for database initialization.
 
 inputs:
   oracle-password:
-    description: 'Oracle database password'
+    description: 'Oracle database password (ORACLE_PASSWORD)'
     required: true
+
   oracle-port:
-    description: 'Oracle database port'
+    description: 'Host port for Oracle container (container port: 1521)'
     required: false
     default: '1522'
 
-  verify-port-connectivity:
-    description: 'Verify localhost port connectivity after DB becomes healthy'
+  docker-compose-file:
+    description: 'Path to docker-compose.yml'
     required: false
-    default: 'true'
+    default: 'docker-compose.yml'
+
+  skip-flyway:
+    description: 'Skip Flyway migration if true (useful for setup-only scenarios)'
+    required: false
+    default: 'false'
+
+  wait-timeout:
+    description: 'Timeout in seconds for database readiness'
+    required: false
+    default: '300'
+
+outputs:
+  connection-string:
+    description: 'JDBC connection string for Oracle'
+    value: 'jdbc:oracle:thin:@localhost:${{ inputs.oracle-port }}/XEPDB1'
+
+  ready:
+    description: 'Whether Oracle is ready for connections'
+    value: ${{ steps.verify-readiness.outputs.ready }}
 
 runs:
   using: composite
+
   steps:
-    - name: Start Docker Compose services
+    - name: Log input configuration
       shell: bash
       run: |
-        echo "Starting Docker Compose services..."
-        docker compose up -d oracle
+        echo "=== Database Setup Configuration ==="
+        echo "Oracle Port: ${{ inputs.oracle-port }}"
+        echo "Docker Compose: ${{ inputs.docker-compose-file }}"
+        echo "Flyway Enabled: ${{ inputs.skip-flyway == 'false' && 'yes' || 'no' }}"
+        echo "Readiness Timeout: ${{ inputs.wait-timeout }}s"
+
+    - name: Start Oracle container
+      id: start-oracle
+      shell: bash
       env:
         ORACLE_PASSWORD: ${{ inputs.oracle-password }}
+      run: |
+        echo "Starting Oracle container..."
+        docker compose -f "${{ inputs.docker-compose-file }}" up -d oracle
+        
+        if [ $? -eq 0 ]; then
+          echo "✓ Oracle container started"
+          echo "started=true" >> $GITHUB_OUTPUT
+        else
+          echo "✗ Failed to start Oracle container"
+          echo "started=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
 
-    - name: Wait for Oracle to be healthy
+    - name: Wait for Oracle port to be listening
+      id: wait-port
       shell: bash
       run: |
-        echo "Waiting for Oracle to be healthy..."
-        max_attempts=60
-        attempt=1
-
-        while [ $attempt -le $max_attempts ]; do
-          # Check if container is running
-          if ! docker ps | grep -q oracle; then
-            echo "Attempt $attempt/$max_attempts: Oracle container not running..."
+        MAX_ATTEMPTS=60
+        ATTEMPT=1
+        PORT=${{ inputs.oracle-port }}
+        
+        echo "Waiting for Oracle to listen on port $PORT..."
+        
+        while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+          if timeout 2 bash -c "</dev/tcp/localhost/$PORT" 2>/dev/null; then
+            echo "✓ Oracle is listening on port $PORT (attempt $ATTEMPT)"
             sleep 2
-            attempt=$((attempt+1))
-            continue
-          fi
-
-          # Check if port is listening
-          if timeout 2 bash -c "</dev/tcp/localhost/${{ inputs.oracle-port }}" 2>/dev/null; then
-            echo "Oracle is listening on port ${{ inputs.oracle-port }}"
-            sleep 2
+            echo "listening=true" >> $GITHUB_OUTPUT
             exit 0
           fi
-
-          echo "Attempt $attempt/$max_attempts: Oracle not ready..."
+          
+          echo "Waiting... (attempt $ATTEMPT/$MAX_ATTEMPTS)"
           sleep 2
-          attempt=$((attempt+1))
+          ATTEMPT=$((ATTEMPT + 1))
         done
-
-        echo "ERROR: Oracle failed to start after $max_attempts attempts"
-        docker compose logs oracle
+        
+        echo "✗ Oracle failed to listen within $MAX_ATTEMPTS attempts"
+        echo "listening=false" >> $GITHUB_OUTPUT
         exit 1
 
-    - name: Verify port connectivity (optional)
-      if: inputs.verify-port-connectivity == 'true'
+    - name: Verify database connectivity
+      id: verify-readiness
       shell: bash
-      run: |
-        echo "=== Network connectivity test ==="
-        docker ps
-        timeout 5 bash -c "</dev/tcp/localhost/${{ inputs.oracle-port }}" && echo "✓ Port ${{ inputs.oracle-port }} is open" || (echo "✗ Port ${{ inputs.oracle-port }} is NOT open" && exit 1)
-
-    - name: Run Flyway migration
-      shell: bash
-      run: |
-        echo "Running Flyway migration..."
-        docker compose run --rm flyway
       env:
         ORACLE_PASSWORD: ${{ inputs.oracle-password }}
+      run: |
+        TIMEOUT=${{ inputs.wait-timeout }}
+        ELAPSED=0
+        INTERVAL=5
+        
+        echo "Verifying database connectivity..."
+        
+        while [ $ELAPSED -lt $TIMEOUT ]; do
+          if docker compose -f "${{ inputs.docker-compose-file }}" exec -T oracle sqlplus -v > /dev/null 2>&1; then
+            echo "✓ Oracle database is ready and accepting connections"
+            echo "ready=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Database not ready yet... ($ELAPSED/$TIMEOUT seconds)"
+          sleep $INTERVAL
+          ELAPSED=$((ELAPSED + INTERVAL))
+        done
+        
+        echo "✗ Oracle failed to become ready within $TIMEOUT seconds"
+        docker compose -f "${{ inputs.docker-compose-file }}" ps oracle
+        echo "ready=false" >> $GITHUB_OUTPUT
+        exit 1
+
+    - name: Run Flyway migration
+      if: inputs.skip-flyway == 'false'
+      shell: bash
+      env:
+        ORACLE_PASSWORD: ${{ inputs.oracle-password }}
+      run: |
+        echo "Running Flyway migrations..."
+        docker compose -f "${{ inputs.docker-compose-file }}" run --rm flyway
+        
+        if [ $? -eq 0 ]; then
+          echo "✓ Flyway migrations completed successfully"
+        else
+          echo "✗ Flyway migrations failed"
+          exit 1
+        fi
+
+    - name: Log database status
+      if: always()
+      shell: bash
+      run: |
+        echo "=== Docker Services Status ==="
+        docker compose -f "${{ inputs.docker-compose-file }}" ps oracle || true
+        docker compose -f "${{ inputs.docker-compose-file }}" ps flyway || true
+
+    - name: Output connection information
+      shell: bash
+      run: |
+        echo "=== Database Connection Information ==="
+        echo "Host: localhost"
+        echo "Port: ${{ inputs.oracle-port }}"
+        echo "Service: XEPDB1"
+        echo "Connection String: jdbc:oracle:thin:@localhost:${{ inputs.oracle-port }}/XEPDB1"
 
