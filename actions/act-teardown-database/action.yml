@@ -33,3 +33,4 @@ runs:
         else
           echo "Running docker compose down"
           docker compose "${COMPOSE_ARGS[@]}" down
+        fi
