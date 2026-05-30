@@ -22,6 +22,9 @@ on:
       oracle-password:
         description: 'Oracle database password'
         required: true
+      sonar-token:
+        description: 'SonarCloud authentication token'
+        required: false
 
 jobs:
   compile:
@@ -195,21 +198,49 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Download jacoco reports
+      - name: Download unit test jacoco report
         uses: actions/download-artifact@v4
         with:
-          path: ${{ inputs.working-directory }}/target/site/
+          name: jacoco-report-unit
+          path: ${{ inputs.working-directory }}/target/site/jacoco-unit
 
-      - name: Aggregate jacoco report
+      - name: Download integration test jacoco report
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-report-integration
+          path: ${{ inputs.working-directory }}/target/site/jacoco-integration
         continue-on-error: true
+
+      - name: Merge jacoco reports
+        shell: bash
         run: |
           cd ${{ inputs.working-directory }}
-          mvn jacoco:report-aggregate
+          
+          # Create target/site/jacoco if it doesn't exist
+          mkdir -p target/site/jacoco
+          
+          # If integration test report exists, use it (as it includes both unit and integration tests)
+          # Otherwise use unit test report
+          if [ -d target/site/jacoco-integration ]; then
+            echo "Using integration test jacoco report (covers all tests)"
+            cp -r target/site/jacoco-integration/* target/site/jacoco/
+          elif [ -d target/site/jacoco-unit ]; then
+            echo "Using unit test jacoco report"
+            cp -r target/site/jacoco-unit/* target/site/jacoco/
+          else
+            echo "Warning: No jacoco reports found"
+          fi
 
       - name: Run SonarQube scan
-        continue-on-error: true
+        if: secrets.sonar-token != ''
+        env:
+          SONAR_TOKEN: ${{ secrets.sonar-token }}
         run: |
           cd ${{ inputs.working-directory }}
-          mvn clean verify sonar:sonar \
-            -Dsonar.projectKey=money-keeper \
+          mvn sonar:sonar \
+            -Dsonar.projectKey=samdofreelancer_money-keeper \
+            -Dsonar.organization=samdofreelancer \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.login=$SONAR_TOKEN \
             -Dsonar.qualitygate.wait=true
+        continue-on-error: true
