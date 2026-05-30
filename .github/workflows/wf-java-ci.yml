@@ -94,11 +94,12 @@ jobs:
           echo "=== Jacoco report location for unit tests ==="
           if [ -d "${{ inputs.working-directory }}/target/site/jacoco" ]; then
             echo "✓ jacoco directory exists"
-            ls -lR ${{ inputs.working-directory }}/target/site/jacoco | head -20
+            echo "Number of files:"
+            find ${{ inputs.working-directory }}/target/site/jacoco -type f 2>/dev/null | wc -l
+            echo "Sample files:"
+            ls ${{ inputs.working-directory }}/target/site/jacoco/ | head -5
           else
             echo "✗ jacoco directory NOT found"
-            echo "Looking for jacoco in alternate locations:"
-            find ${{ inputs.working-directory }}/target -name "jacoco*" -o -name "*coverage*" 2>/dev/null || true
           fi
 
       - name: Upload unit test reports
@@ -176,14 +177,15 @@ jobs:
         run: |
           set +e
           echo "=== Directory structure in target ==="
-          ls -d ${{ inputs.working-directory }}/target/*/ 2>/dev/null | head -10
+          ls -d ${{ inputs.working-directory }}/target/*/
           echo ""
           echo "=== Jacoco report location ==="
           if [ -d "${{ inputs.working-directory }}/target/site/jacoco" ]; then
-            echo "✓ jacoco directory exists at ${{ inputs.working-directory }}/target/site/jacoco"
-            ls -lR ${{ inputs.working-directory }}/target/site/jacoco | head -20
+            echo "✓ jacoco directory exists"
+            echo "Number of files:"
+            find ${{ inputs.working-directory }}/target/site/jacoco -type f 2>/dev/null | wc -l
           else
-            echo "✗ jacoco directory NOT found at ${{ inputs.working-directory }}/target/site/jacoco"
+            echo "✗ jacoco directory NOT found"
           fi
 
       - name: Upload integration test reports
