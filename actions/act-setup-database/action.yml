@@ -1,0 +1,26 @@
+name: Setup Database (Oracle + Flyway)
+description: 'Setup Oracle database and run Flyway migrations'
+
+inputs:
+  oracle-password:
+    description: 'Oracle database password'
+    required: true
+  oracle-port:
+    description: 'Oracle database port'
+    required: false
+    default: '1522'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Oracle
+      uses: samdofreelancer/cloud-workflow/actions/act-setup-oracle@develop
+      with:
+        oracle-password: ${{ inputs.oracle-password }}
+        oracle-port: ${{ inputs.oracle-port }}
+
+    - name: Run Flyway migration
+      shell: bash
+      run: docker compose up flyway
+      env:
+        ORACLE_PASSWORD: ${{ inputs.oracle-password }}

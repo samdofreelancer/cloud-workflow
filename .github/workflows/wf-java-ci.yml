@@ -24,35 +24,9 @@ on:
         required: true
 
 jobs:
-  setup:
-    name: Setup environment
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Oracle
-        uses: samdofreelancer/cloud-workflow/actions/act-setup-oracle@develop
-        with:
-          oracle-password: ${{ secrets.oracle-password }}
-          oracle-port: '1522'
-
-      - name: Setup Java
-        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@develop
-        with:
-          java-version: ${{ inputs.java-version }}
-          working-directory: ${{ inputs.working-directory }}
-
-      - name: Run Flyway migration
-        run: |
-          docker compose up flyway
-        env:
-          ORACLE_PASSWORD: ${{ secrets.oracle-password }}
-
   compile:
     name: Compile source
     runs-on: ubuntu-latest
-    needs: setup
     env:
       SPRING_PROFILES_ACTIVE: ci
     steps:
@@ -163,12 +137,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Oracle
-        uses: samdofreelancer/cloud-workflow/actions/act-setup-oracle@develop
-        with:
-          oracle-password: ${{ secrets.oracle-password }}
-          oracle-port: '1522'
-
       - name: Setup Java
         uses: samdofreelancer/cloud-workflow/actions/act-setup-java@develop
         with:
@@ -187,11 +155,11 @@ jobs:
           name: m2-repository
           path: ~/.m2/repository
 
-      - name: Run Flyway migration
-        run: |
-          docker compose up flyway
-        env:
-          ORACLE_PASSWORD: ${{ secrets.oracle-password }}
+      - name: Setup Database (Oracle + Flyway)
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-database@develop
+        with:
+          oracle-password: ${{ secrets.oracle-password }}
+          oracle-port: '1522'
 
       - name: Run integration tests
         uses: samdofreelancer/cloud-workflow/actions/act-run-integration-test@develop
