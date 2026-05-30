@@ -49,7 +49,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Java
-        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@v1.0.0
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
@@ -57,7 +57,7 @@ jobs:
           working-directory: ${{ inputs.working-directory }}
 
       - name: Run unit tests
-        uses: samdofreelancer/cloud-workflow/actions/act-run-unit-test@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-run-unit-test@v1.0.0
         with:
           working-directory: ${{ inputs.working-directory }}
           maven-profile: 'small-test'
@@ -65,7 +65,7 @@ jobs:
       - name: Upload unit test reports
         if: always()
         continue-on-error: true
-        uses: samdofreelancer/cloud-workflow/actions/act-upload-test-report@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-upload-test-report@v1.0.0
         with:
           artifact-name: surefire-report-unit
           report-path: ${{ inputs.working-directory }}/target/small-test-reports
@@ -98,7 +98,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Java
-        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@v1.0.0
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
@@ -106,13 +106,13 @@ jobs:
           working-directory: ${{ inputs.working-directory }}
 
       - name: Setup Database (Oracle + Flyway)
-        uses: samdofreelancer/cloud-workflow/actions/act-setup-database@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-database@v1.0.0
         with:
           oracle-password: ${{ secrets.oracle-password }}
           oracle-port: '1522'
 
       - name: Run integration tests
-        uses: samdofreelancer/cloud-workflow/actions/act-run-integration-test@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-run-integration-test@v1.0.0
         with:
           working-directory: ${{ inputs.working-directory }}
           maven-profile: 'medium-test'
@@ -122,7 +122,7 @@ jobs:
       - name: Upload integration test reports
         if: always()
         continue-on-error: true
-        uses: samdofreelancer/cloud-workflow/actions/act-upload-test-report@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-upload-test-report@v1.0.0
         with:
           artifact-name: surefire-report-integration
           report-path: ${{ inputs.working-directory }}/target/medium-test-reports
@@ -141,7 +141,7 @@ jobs:
 
       - name: Teardown Database
         if: always()
-        uses: samdofreelancer/cloud-workflow/actions/act-teardown-database@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-teardown-database@v1.0.0
 
   analysis:
     name: Code analysis & quality gates
@@ -159,7 +159,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Java
-        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-setup-java@v1.0.0
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
@@ -181,7 +181,7 @@ jobs:
         continue-on-error: true
 
       - name: Merge jacoco reports
-        uses: samdofreelancer/cloud-workflow/actions/act-merge-jacoco-reports@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-merge-jacoco-reports@v1.0.0
         with:
           working-directory: ${{ inputs.working-directory }}
           unit-jacoco-path: 'target/site/jacoco-unit'
@@ -196,7 +196,7 @@ jobs:
 
       - name: Run Sonar scan
         if: env.SONAR_TOKEN != ''
-        uses: samdofreelancer/cloud-workflow/actions/act-run-sonar-scan@develop
+        uses: samdofreelancer/cloud-workflow/actions/act-run-sonar-scan@v1.0.0
         with:
           working-directory: ${{ inputs.working-directory }}
           sonar-token: ${{ secrets.sonar-token }}
