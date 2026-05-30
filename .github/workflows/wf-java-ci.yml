@@ -109,7 +109,7 @@ jobs:
     needs: compile
     env:
       SPRING_PROFILES_ACTIVE: ci
-      ORACLE_PASSWORD: ${{ secrets.oracle-password }}
+      SPRING_DATASOURCE_PASSWORD: ${{ secrets.oracle-password }}
       VITE_BACKEND_HOST: backend
     steps:
       - name: Checkout code
@@ -134,11 +134,23 @@ jobs:
           oracle-password: ${{ secrets.oracle-password }}
           oracle-port: '1522'
 
+      - name: Verify Docker services
+        run: |
+          echo "=== Docker containers ==="
+          docker ps
+          echo "=== Network connectivity test ==="
+          timeout 5 bash -c "</dev/tcp/localhost/1522" && echo "✓ Port 1522 is open" || echo "✗ Port 1522 is NOT open"
+          echo "=== Datasource URL test ==="
+          echo "SPRING_DATASOURCE_URL from config: jdbc:oracle:thin:@localhost:1522/XEPDB1"
+          echo "ORACLE_PASSWORD is set: ${#ORACLE_PASSWORD} characters"
+
       - name: Run integration tests
         uses: samdofreelancer/cloud-workflow/actions/act-run-integration-test@develop
         with:
           working-directory: ${{ inputs.working-directory }}
           maven-profile: 'medium-test'
+        env:
+          ORACLE_PASSWORD: ${{ secrets.oracle-password }}
 
       - name: Upload integration test reports
         if: always()

@@ -13,39 +13,45 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Setup Oracle
-      uses: samdofreelancer/cloud-workflow/actions/act-setup-oracle@develop
-      with:
-        oracle-password: ${{ inputs.oracle-password }}
-        oracle-port: ${{ inputs.oracle-port }}
-
-    - name: Start Docker Compose services in background
+    - name: Start Docker Compose services
       shell: bash
       run: |
         echo "Starting Docker Compose services..."
-        docker compose up -d
+        docker compose up -d oracle
       env:
         ORACLE_PASSWORD: ${{ inputs.oracle-password }}
 
-    - name: Wait for Oracle to be ready
+    - name: Wait for Oracle to be healthy
       shell: bash
       run: |
-        echo "Waiting for Oracle to accept connections..."
-        for i in {1..60}; do
-          if timeout 2 bash -c "</dev/tcp/localhost/1522" 2>/dev/null; then
-            echo "Oracle port 1522 is open"
-            sleep 3
-            echo "Oracle is ready"
+        echo "Waiting for Oracle to be healthy..."
+        max_attempts=60
+        attempt=1
+        
+        while [ $attempt -le $max_attempts ]; do
+          # Check if container is running
+          if ! docker ps | grep -q oracle; then
+            echo "Attempt $attempt/$max_attempts: Oracle container not running..."
+            sleep 2
+            attempt=$((attempt+1))
+            continue
+          fi
+          
+          # Check if port is listening
+          if timeout 2 bash -c "</dev/tcp/localhost/${{ inputs.oracle-port }}" 2>/dev/null; then
+            echo "Oracle is listening on port ${{ inputs.oracle-port }}"
+            sleep 2
             exit 0
           fi
-          echo "Attempt $i/60: Oracle not responding on port 1522..."
+          
+          echo "Attempt $attempt/$max_attempts: Oracle not ready..."
           sleep 2
+          attempt=$((attempt+1))
         done
-        echo "Oracle failed to start after 120 seconds"
+        
+        echo "ERROR: Oracle failed to start after $max_attempts attempts"
         docker compose logs oracle
         exit 1
-      env:
-        ORACLE_PASSWORD: ${{ inputs.oracle-password }}
 
     - name: Run Flyway migration
       shell: bash
