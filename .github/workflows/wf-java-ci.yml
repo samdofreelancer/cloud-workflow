@@ -207,11 +207,9 @@ jobs:
           retention-days: ${{ inputs.artifact-retention-days }}
           if-no-files-found: 'ignore'
 
-      - name: Cleanup services
+      - name: Teardown Database (Docker Compose)
         if: always()
-        run: docker compose down
-        env:
-          ORACLE_PASSWORD: ${{ secrets.oracle-password }}
+        uses: ./actions/act-teardown-database
 
   analysis:
     name: Code analysis & quality gates
