@@ -303,10 +303,12 @@ jobs:
         if: env.SONAR_TOKEN != ''
         run: |
           cd ${{ inputs.working-directory }}
+          BRANCH_NAME=$(echo "${GITHUB_REF#refs/heads/}")
           mvn sonar:sonar \
             -Dsonar.projectKey=springboot-ddd-category \
             -Dsonar.organization=samdofreelancer \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.login=$SONAR_TOKEN \
             -Dsonar.qualitygate.wait=true \
-            -Dsonar.java.binaries=target/classes
+            -Dsonar.java.binaries=target/classes \
+            -Dsonar.branch.name=$BRANCH_NAME
